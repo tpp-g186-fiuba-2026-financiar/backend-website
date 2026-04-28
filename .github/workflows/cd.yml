@@ -7,6 +7,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: ${{ secrets.DOCKER_USERNAME != '' }}
 
     steps:
       - uses: actions/checkout@v4
