@@ -33,7 +33,10 @@ async fn main() {
     let cfg = Config::from_env();
     let pool = db::create_pool(&cfg.database_url).await;
 
-    db::create_tables(&pool).await;
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("Failed to run database migrations");
 
     // Adding CORS
     let allowed_origin = env::var("ALLOWED_ORIGIN").expect("ALLOWED_ORIGIN must be set");

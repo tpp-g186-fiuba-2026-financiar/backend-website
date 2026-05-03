@@ -1,0 +1,41 @@
+services:
+  db-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
+    # We don't expose ports to the host to avoid clashing with your main dev DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      interval: 5s      # Wait 5 seconds between checks
+      timeout: 5s       # Give the check 5 seconds to run
+      retries: 10      
+
+  test-runner:
+    image: rust:latest
+    working_dir: /app
+    volumes:
+      - .:/app
+      - cargo_registry:/usr/local/cargo/registry
+      - target_cache:/app/target
+    environment:
+      DATABASE_URL: postgresql://test_user:test_password@db-test:5432/test_db
+      RUST_LOG: info
+      SQLX_OFFLINE: "true"
+    depends_on:
+      db-test:
+        condition: service_healthy
+    command: >
+      bash -c "
+      echo 'Installing sqlx-cli (will use cache on future runs)...' &&
+      cargo install sqlx-cli --no-default-features --features rustls,postgres || true &&
+      echo 'Running migrations on test database...' &&
+      cargo sqlx migrate run &&
+      echo 'Running tests...' &&
+      cargo test
+      "
+
+volumes:
+  cargo_registry:
+  target_cache:
