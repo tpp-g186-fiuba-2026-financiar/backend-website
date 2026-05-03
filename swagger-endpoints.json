@@ -1,0 +1,252 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "backend-website",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Health check successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hello": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Simple Hello Response!",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelloResponse"
+                },
+                "example": {
+                  "message": "Hello from Financiar backend!",
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "User registered successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "examples": {
+                  "Invalid Email": {
+                    "summary": "Triggered when the email is invalid (either wrong format or not provided)",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid e-mail"
+                    }
+                  },
+                  "Invalid Risk Profile": {
+                    "summary": "Triggered when risk profile is not a permitted value",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid risk profile. Must be 'conservative', 'moderate', or 'aggressive'."
+                    }
+                  },
+                  "Weak Password": {
+                    "summary": "Triggered when password requirements are not met",
+                    "value": {
+                      "code": 400,
+                      "message": "Password must be at least 8 characters long and contain a mix of letters, numbers, and special characters"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "User already exists for that email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 409,
+                  "message": "User already exists for that email!"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HelloResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "full_name"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "financiar186@gmail.com"
+          },
+          "full_name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPassword123!"
+          },
+          "risk_profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional. Must be 'conservative', 'moderate', or 'aggressive'",
+            "example": "moderate"
+          }
+        }
+      },
+      "RegisterUserResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Endpoints for user identity management"
+    },
+    {
+      "name": "General",
+      "description": "General endpoints for knowing the status of the backend and other general information"
+    }
+  ]
+}
