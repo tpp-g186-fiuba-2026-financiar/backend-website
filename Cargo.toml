@@ -14,6 +14,9 @@ tower-http      = { version = "0.5", features = ["trace", "cors"] }
 tracing         = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 argon2          = "0.5"
+utoipa = "5.4.0"
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
+regex          = "1"
 
 [dev-dependencies]
 tower           = { version = "0.4", features = ["util"] }
