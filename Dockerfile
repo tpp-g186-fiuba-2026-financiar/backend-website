@@ -2,7 +2,8 @@ FROM rust:latest AS builder
 WORKDIR /app
 COPY Cargo.toml .
 COPY src ./src
-COPY .sqlx ./.sqlx 
+COPY .sqlx ./.sqlx
+COPY migrations ./migrations
 ENV SQLX_OFFLINE=true
 
 RUN cargo build --release
