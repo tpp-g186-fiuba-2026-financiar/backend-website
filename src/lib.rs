@@ -9,6 +9,7 @@ use axum::{
 use sqlx::PgPool;
 use utoipa::OpenApi;
 
+use crate::endpoints::user::login_logic::{self, LoginUserRequest};
 use crate::endpoints::user::registration::registration_logic::{self, RegisterUserRequest};
 
 #[derive(OpenApi)]
@@ -16,10 +17,11 @@ use crate::endpoints::user::registration::registration_logic::{self, RegisterUse
     paths(
         endpoints::health::handler,
         endpoints::hello::handler,
-        endpoints::user::registration::registration_logic::handler
+        endpoints::user::registration::registration_logic::handler,
+        endpoints::user::login_logic::handler
     ),
     components(
-        schemas(RegisterUserRequest)
+        schemas(RegisterUserRequest, LoginUserRequest)
     ),
     tags(
         (name = "Authentication", description = "Endpoints for user identity management"),
@@ -33,5 +35,6 @@ pub fn app(pool_state: PgPool) -> Router {
         .route("/health", get(endpoints::health::handler))
         .route("/hello", get(endpoints::hello::handler))
         .route("/register", post(registration_logic::handler))
+        .route("/login", post(login_logic::handler))
         .with_state(pool_state)
 }
