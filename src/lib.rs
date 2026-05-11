@@ -45,4 +45,3 @@ pub fn app(pool_state: PgPool, session_layer: SessionManagerLayer<PostgresStore>
         .merge(normal_routes)
         .with_state(pool_state)
 }
-

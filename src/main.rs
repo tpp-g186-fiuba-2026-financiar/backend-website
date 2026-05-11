@@ -69,10 +69,8 @@ async fn main() {
 
     let swagger = SwaggerUi::new("/swagger").url("/swagger-endpoints.json", ApiDoc::openapi());
 
-        // Use nest_service instead of merge
-    let router = app(pool, session_layer)
-            .layer(cors)
-            .merge(swagger);
+    // Use nest_service instead of merge
+    let router = app(pool, session_layer).layer(cors).merge(swagger);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = TcpListener::bind(addr)
@@ -93,5 +91,4 @@ async fn main() {
         }
     });
     axum::serve(listener, router).await.unwrap();
-
 }

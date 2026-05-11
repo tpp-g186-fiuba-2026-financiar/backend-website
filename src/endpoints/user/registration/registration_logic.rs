@@ -141,7 +141,7 @@ pub async fn handler(
         r#"
         INSERT INTO users (email, password_hash, full_name, risk_profile) 
         VALUES ($1, $2, $3, $4)
-        "#
+        "#,
     )
     .bind(payload.email.trim())
     .bind(hashed_password)

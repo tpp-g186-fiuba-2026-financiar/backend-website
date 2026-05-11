@@ -56,11 +56,10 @@ pub async fn handler(
         }));
     }
 
-    let user_result = sqlx::query(
-        "SELECT password_hash, id FROM users WHERE email = $1"
-    ).bind(payload.email.trim())
-    .fetch_optional(&pool)
-    .await;
+    let user_result = sqlx::query("SELECT password_hash, id FROM users WHERE email = $1")
+        .bind(payload.email.trim())
+        .fetch_optional(&pool)
+        .await;
 
     let (stored_hash, serial_id) = match user_result {
         Ok(Some(row)) => {
@@ -75,7 +74,7 @@ pub async fn handler(
                 }
             };
             (password_hashed, id)
-        },
+        }
         Ok(None) => {
             return axum::response::Json(json!({
                 "code": 401,
