@@ -10,7 +10,9 @@ services:
       test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
       interval: 5s      # Wait 5 seconds between checks
       timeout: 5s       # Give the check 5 seconds to run
-      retries: 10      
+      retries: 10 
+    networks:
+      - financiar_shared_network_test
 
   test-runner:
     image: rust:latest
@@ -35,7 +37,13 @@ services:
       echo 'Running tests...' &&
       cargo test
       "
+    networks:
+      - financiar_shared_network_test
 
 volumes:
   cargo_registry:
   target_cache:
+
+networks:
+  financiar_shared_network_test:
+    driver: bridge

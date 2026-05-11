@@ -56,15 +56,26 @@ pub async fn handler(
         }));
     }
 
-    let user_result = sqlx::query!(
-        "SELECT password_hash, id FROM users WHERE email = $1",
-        payload.email
-    )
+    let user_result = sqlx::query(
+        "SELECT password_hash, id FROM users WHERE email = $1"
+    ).bind(payload.email.trim())
     .fetch_optional(&pool)
     .await;
 
     let (stored_hash, serial_id) = match user_result {
-        Ok(Some(row)) => (row.password_hash, row.id),
+        Ok(Some(row)) => {
+            let (password_hashed, id): (String, i32) = match sqlx::FromRow::from_row(&row) {
+                Ok(data) => data,
+                Err(err) => {
+                    tracing::error!("Failed to parse user data during login: {}", err);
+                    return axum::response::Json(json!({
+                        "code": 500,
+                        "message": "An unexpected error occurred. Please try again later."
+                    }));
+                }
+            };
+            (password_hashed, id)
+        },
         Ok(None) => {
             return axum::response::Json(json!({
                 "code": 401,
