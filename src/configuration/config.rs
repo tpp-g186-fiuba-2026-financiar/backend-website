@@ -1,3 +1,7 @@
+use crate::auth::jwt::JwtConfig;
+use axum::extract::FromRef;
+use sqlx::PgPool;
+
 pub struct Config {
     pub database_url: String,
     pub port: u16,
@@ -13,4 +17,10 @@ impl Config {
                 .expect("PORT must be a valid number"),
         }
     }
+}
+
+#[derive(Clone, FromRef)]
+pub struct AppState {
+    pub pool: PgPool,
+    pub jwt_config: JwtConfig,
 }

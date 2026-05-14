@@ -6,6 +6,8 @@ use sqlx::PgPool;
 use tower_sessions::Session;
 use utoipa::ToSchema;
 
+use crate::auth::jwt::JwtConfig;
+
 #[derive(Deserialize, ToSchema)]
 pub struct LoginUserRequest {
     #[schema(example = "financiar186@gmail.com")]
@@ -18,6 +20,8 @@ pub struct LoginUserRequest {
 pub struct LoginUserResponse {
     pub code: u16,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 #[utoipa::path(
@@ -27,7 +31,8 @@ pub struct LoginUserResponse {
     responses(
         (status = 200, description = "User logged in successfully", body = LoginUserResponse, example = json!({
             "code": 200,
-            "message": "Login successful"
+            "message": "Login successful",
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         })),
         (status = 400, description = "Missing required fields", body = LoginUserResponse, example = json!({
             "code": 400,
@@ -47,6 +52,7 @@ pub struct LoginUserResponse {
 pub async fn handler(
     session: Session,
     State(pool): State<PgPool>,
+    State(jwt_config): State<JwtConfig>,
     axum::Json(payload): axum::Json<LoginUserRequest>,
 ) -> axum::response::Json<serde_json::Value> {
     if payload.email.trim().is_empty() || payload.password.is_empty() {
@@ -56,8 +62,10 @@ pub async fn handler(
         }));
     }
 
+    let email = payload.email.trim();
+
     let user_result = sqlx::query("SELECT password_hash, id FROM users WHERE email = $1")
-        .bind(payload.email.trim())
+        .bind(email)
         .fetch_optional(&pool)
         .await;
 
@@ -97,20 +105,30 @@ pub async fn handler(
         }));
     }
 
-    match session.insert("user_id", serial_id).await {
-        Ok(_) => axum::response::Json(json!({
-            "code": 200,
-            "message": "Login successful"
-        })),
+    let token = match jwt_config.encode_token(serial_id, email) {
+        Ok(t) => t,
         Err(err) => {
-            tracing::error!("Failed to create session during login: {}", err);
-
-            axum::response::Json(json!({
+            tracing::error!("Failed to issue JWT for user {}: {}", serial_id, err);
+            return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
-            }))
+            }));
         }
+    };
+
+    if let Err(err) = session.insert("user_id", serial_id).await {
+        tracing::error!("Failed to create session during login: {}", err);
+        return axum::response::Json(json!({
+            "code": 500,
+            "message": "An unexpected error occurred. Please try again later."
+        }));
     }
+
+    axum::response::Json(json!({
+        "code": 200,
+        "message": "Login successful",
+        "token": token
+    }))
 }
 
 fn verify_password(password: &str, stored_hash: &str) -> bool {
