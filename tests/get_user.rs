@@ -1,12 +1,15 @@
 use axum::{
     body::Body,
     http::{header, Request, StatusCode},
+    Router,
 };
 use backend_website::{app_with_state, auth::jwt::JwtConfig, configuration::config::AppState};
 use dotenvy::dotenv;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use tower::ServiceExt;
+use tower_sessions::SessionManagerLayer;
+use tower_sessions_sqlx_store::PostgresStore;
 
 const JWT_SECRET: &str = "test-secret-for-get-user";
 const JWT_EXP_HOURS: i64 = 24;
@@ -21,6 +24,16 @@ async fn setup() -> AppState {
         pool,
         jwt_config: JwtConfig::new(JWT_SECRET, JWT_EXP_HOURS),
     }
+}
+
+async fn build_app(state: AppState) -> Router {
+    let session_store = PostgresStore::new(state.pool.clone());
+    session_store
+        .migrate()
+        .await
+        .expect("Failed to run session store migrations");
+    let session_layer = SessionManagerLayer::new(session_store).with_secure(false);
+    app_with_state(state, session_layer)
 }
 
 async fn cleanup(pool: &sqlx::PgPool, email: &str) {
@@ -43,7 +56,7 @@ async fn register_and_login(
     password: &str,
     full_name: &str,
 ) -> String {
-    let app = app_with_state(state.clone());
+    let app = build_app(state.clone()).await;
 
     let register_body = json!({
         "email": email,
@@ -92,7 +105,7 @@ async fn register_and_login(
 #[tokio::test]
 async fn get_user_without_token_returns_401() {
     let state = setup().await;
-    let app = app_with_state(state);
+    let app = build_app(state).await;
 
     let response = app
         .oneshot(Request::builder().uri("/user").body(Body::empty()).unwrap())
@@ -108,7 +121,7 @@ async fn get_user_without_token_returns_401() {
 #[tokio::test]
 async fn get_user_with_invalid_token_returns_401() {
     let state = setup().await;
-    let app = app_with_state(state);
+    let app = build_app(state).await;
 
     let response = app
         .oneshot(
@@ -127,7 +140,7 @@ async fn get_user_with_invalid_token_returns_401() {
 #[tokio::test]
 async fn get_user_with_malformed_authorization_header_returns_401() {
     let state = setup().await;
-    let app = app_with_state(state);
+    let app = build_app(state).await;
 
     let response = app
         .oneshot(
@@ -149,7 +162,7 @@ async fn get_user_with_valid_token_returns_user_info() {
     let email = unique_email("happy");
     let token = register_and_login(&state, &email, "StrongPassword123!", "Get User").await;
 
-    let app = app_with_state(state.clone());
+    let app = build_app(state.clone()).await;
     let response = app
         .oneshot(
             Request::builder()
@@ -179,7 +192,7 @@ async fn get_user_with_token_signed_by_other_secret_returns_401() {
     let foreign_jwt = JwtConfig::new("a-completely-different-secret", JWT_EXP_HOURS);
     let foreign_token = foreign_jwt.encode_token(1, "intruder@test.com").unwrap();
 
-    let app = app_with_state(state);
+    let app = build_app(state).await;
     let response = app
         .oneshot(
             Request::builder()
@@ -202,7 +215,7 @@ async fn get_user_returns_404_when_user_was_deleted() {
 
     cleanup(&state.pool, &email).await;
 
-    let app = app_with_state(state);
+    let app = build_app(state).await;
     let response = app
         .oneshot(
             Request::builder()
