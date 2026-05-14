@@ -84,7 +84,8 @@
                 },
                 "example": {
                   "code": 200,
-                  "message": "Login successful"
+                  "message": "Login successful",
+                  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 }
               }
             }
@@ -228,10 +229,87 @@
           }
         }
       }
+    },
+    "/user": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Authenticated user retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-13T12:00:00Z",
+                  "email": "financiar186@gmail.com",
+                  "full_name": "John Doe",
+                  "id": 1,
+                  "is_active": true,
+                  "risk_profile": "moderate"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Authenticated user no longer exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "GetUserResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "full_name",
+          "is_active",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "risk_profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "required": [
@@ -297,6 +375,12 @@
           },
           "message": {
             "type": "string"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -347,12 +431,23 @@
           }
         }
       }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
     }
   },
   "tags": [
     {
       "name": "Authentication",
       "description": "Endpoints for user identity management"
+    },
+    {
+      "name": "User",
+      "description": "Endpoints for retrieving authenticated user information"
     },
     {
       "name": "General",
