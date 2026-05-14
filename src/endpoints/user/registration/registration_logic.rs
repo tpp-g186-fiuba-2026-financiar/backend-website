@@ -104,7 +104,8 @@ pub async fn handler(
     }
 
     // --- 2. Check Existing User ---
-    let existing_user_result = sqlx::query!("SELECT id FROM users WHERE email = $1", payload.email)
+    let existing_user_result = sqlx::query("SELECT id FROM users WHERE email = $1")
+        .bind(payload.email.trim())
         .fetch_optional(&pool)
         .await;
 
@@ -136,16 +137,16 @@ pub async fn handler(
         }
     };
 
-    let insert_result = sqlx::query!(
+    let insert_result = sqlx::query(
         r#"
         INSERT INTO users (email, password_hash, full_name, risk_profile) 
         VALUES ($1, $2, $3, $4)
         "#,
-        payload.email,
-        hashed_password,
-        payload.full_name,
-        payload.risk_profile
     )
+    .bind(payload.email.trim())
+    .bind(hashed_password)
+    .bind(payload.full_name)
+    .bind(payload.risk_profile)
     .execute(&pool)
     .await;
 

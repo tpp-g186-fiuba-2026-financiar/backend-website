@@ -7,6 +7,8 @@ use axum::{
     Router,
 };
 use sqlx::PgPool;
+use tower_sessions::SessionManagerLayer;
+use tower_sessions_sqlx_store::PostgresStore;
 use utoipa::OpenApi;
 
 use crate::endpoints::user::login_logic::{self, LoginUserRequest};
@@ -30,11 +32,16 @@ use crate::endpoints::user::registration::registration_logic::{self, RegisterUse
 )]
 pub struct ApiDoc;
 
-pub fn app(pool_state: PgPool) -> Router {
-    Router::new()
-        .route("/health", get(endpoints::health::handler))
+pub fn app(pool_state: PgPool, session_layer: SessionManagerLayer<PostgresStore>) -> Router {
+    // 1. Open routes, requires neither session or sql pool.
+    let normal_routes = Router::new()
         .route("/hello", get(endpoints::hello::handler))
-        .route("/register", post(registration_logic::handler))
+        .route("/health", get(endpoints::health::handler))
+        .route("/register", post(registration_logic::handler));
+
+    Router::new()
         .route("/login", post(login_logic::handler))
+        .layer(session_layer)
+        .merge(normal_routes)
         .with_state(pool_state)
 }

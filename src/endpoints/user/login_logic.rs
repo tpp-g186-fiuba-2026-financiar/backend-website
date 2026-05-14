@@ -3,6 +3,7 @@ use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
+use tower_sessions::Session;
 use utoipa::ToSchema;
 
 #[derive(Deserialize, ToSchema)]
@@ -44,6 +45,7 @@ pub struct LoginUserResponse {
     tag = "Authentication"
 )]
 pub async fn handler(
+    session: Session,
     State(pool): State<PgPool>,
     axum::Json(payload): axum::Json<LoginUserRequest>,
 ) -> axum::response::Json<serde_json::Value> {
@@ -54,15 +56,25 @@ pub async fn handler(
         }));
     }
 
-    let user_result = sqlx::query!(
-        "SELECT password_hash FROM users WHERE email = $1",
-        payload.email
-    )
-    .fetch_optional(&pool)
-    .await;
+    let user_result = sqlx::query("SELECT password_hash, id FROM users WHERE email = $1")
+        .bind(payload.email.trim())
+        .fetch_optional(&pool)
+        .await;
 
-    let stored_hash = match user_result {
-        Ok(Some(row)) => row.password_hash,
+    let (stored_hash, serial_id) = match user_result {
+        Ok(Some(row)) => {
+            let (password_hashed, id): (String, i32) = match sqlx::FromRow::from_row(&row) {
+                Ok(data) => data,
+                Err(err) => {
+                    tracing::error!("Failed to parse user data during login: {}", err);
+                    return axum::response::Json(json!({
+                        "code": 500,
+                        "message": "An unexpected error occurred. Please try again later."
+                    }));
+                }
+            };
+            (password_hashed, id)
+        }
         Ok(None) => {
             return axum::response::Json(json!({
                 "code": 401,
@@ -85,10 +97,20 @@ pub async fn handler(
         }));
     }
 
-    axum::response::Json(json!({
-        "code": 200,
-        "message": "Login successful"
-    }))
+    match session.insert("user_id", serial_id).await {
+        Ok(_) => axum::response::Json(json!({
+            "code": 200,
+            "message": "Login successful"
+        })),
+        Err(err) => {
+            tracing::error!("Failed to create session during login: {}", err);
+
+            axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred. Please try again later."
+            }))
+        }
+    }
 }
 
 fn verify_password(password: &str, stored_hash: &str) -> bool {

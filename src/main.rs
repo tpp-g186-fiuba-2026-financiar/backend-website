@@ -5,8 +5,11 @@ use axum::http::{
 use backend_website::{app, configuration::config::Config, database::db, ApiDoc};
 use dotenvy::dotenv;
 use std::{env, net::SocketAddr};
+use time::Duration;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
+use tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer};
+use tower_sessions_sqlx_store::PostgresStore;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -52,14 +55,40 @@ async fn main() {
         ])
         .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE]);
 
-    // Creating server
+    let session_store = PostgresStore::new(pool.clone());
+    session_store
+        .migrate()
+        .await
+        .expect("Failed to run migrations");
+
+    let session_expires_time = Expiry::OnInactivity(Duration::minutes(2));
+
+    let session_layer = SessionManagerLayer::new(session_store.clone())
+        .with_expiry(session_expires_time)
+        .with_secure(!cfg.database_url.contains("localhost")); // Cleaner toggle
+
     let swagger = SwaggerUi::new("/swagger").url("/swagger-endpoints.json", ApiDoc::openapi());
 
-    let router = app(pool).layer(cors).merge(swagger);
+    // Use nest_service instead of merge
+    let router = app(pool, session_layer).layer(cors).merge(swagger);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
-    let listener = TcpListener::bind(addr).await.unwrap();
+    let listener = TcpListener::bind(addr)
+        .await
+        .expect("[Backend Website] Failed to bind to address");
 
     tracing::info!("listening on {addr}");
+
+    tokio::spawn(async move {
+        // Lucas disclaimer: This delete is only visual, the actual deletion is handled by the tower_sessions library.
+        // This is just to make sure are deleted from the table and we keep a clean database.
+        loop {
+            tokio::time::sleep(std::time::Duration::from_hours(1)).await;
+            tracing::info!("[Session Cleanup] Deleting expired sessions...");
+            session_store.delete_expired().await.unwrap_or_else(|err| {
+                tracing::error!("Failed to delete expired sessions: {}", err);
+            });
+        }
+    });
     axum::serve(listener, router).await.unwrap();
 }
