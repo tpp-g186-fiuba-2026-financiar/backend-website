@@ -2,11 +2,7 @@ use axum::{
     body::Body,
     http::{header, Request, StatusCode},
 };
-use backend_website::{
-    app_with_state,
-    auth::jwt::JwtConfig,
-    configuration::config::AppState,
-};
+use backend_website::{app_with_state, auth::jwt::JwtConfig, configuration::config::AppState};
 use dotenvy::dotenv;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
