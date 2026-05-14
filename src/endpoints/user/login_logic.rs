@@ -5,6 +5,8 @@ use serde_json::json;
 use sqlx::PgPool;
 use utoipa::ToSchema;
 
+use crate::auth::jwt::JwtConfig;
+
 #[derive(Deserialize, ToSchema)]
 pub struct LoginUserRequest {
     #[schema(example = "financiar186@gmail.com")]
@@ -17,6 +19,8 @@ pub struct LoginUserRequest {
 pub struct LoginUserResponse {
     pub code: u16,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 #[utoipa::path(
@@ -26,7 +30,8 @@ pub struct LoginUserResponse {
     responses(
         (status = 200, description = "User logged in successfully", body = LoginUserResponse, example = json!({
             "code": 200,
-            "message": "Login successful"
+            "message": "Login successful",
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         })),
         (status = 400, description = "Missing required fields", body = LoginUserResponse, example = json!({
             "code": 400,
@@ -45,6 +50,7 @@ pub struct LoginUserResponse {
 )]
 pub async fn handler(
     State(pool): State<PgPool>,
+    State(jwt_config): State<JwtConfig>,
     axum::Json(payload): axum::Json<LoginUserRequest>,
 ) -> axum::response::Json<serde_json::Value> {
     if payload.email.trim().is_empty() || payload.password.is_empty() {
@@ -55,14 +61,14 @@ pub async fn handler(
     }
 
     let user_result = sqlx::query!(
-        "SELECT password_hash FROM users WHERE email = $1",
+        "SELECT id, password_hash FROM users WHERE email = $1",
         payload.email
     )
     .fetch_optional(&pool)
     .await;
 
-    let stored_hash = match user_result {
-        Ok(Some(row)) => row.password_hash,
+    let (user_id, stored_hash) = match user_result {
+        Ok(Some(row)) => (row.id, row.password_hash),
         Ok(None) => {
             return axum::response::Json(json!({
                 "code": 401,
@@ -85,9 +91,21 @@ pub async fn handler(
         }));
     }
 
+    let token = match jwt_config.encode_token(user_id, &payload.email) {
+        Ok(t) => t,
+        Err(err) => {
+            tracing::error!("Failed to issue JWT for user {}: {}", user_id, err);
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred. Please try again later."
+            }));
+        }
+    };
+
     axum::response::Json(json!({
         "code": 200,
-        "message": "Login successful"
+        "message": "Login successful",
+        "token": token
     }))
 }
 

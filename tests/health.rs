@@ -6,6 +6,9 @@ use tower::ServiceExt;
 async fn create_basic_pool() -> sqlx::PgPool {
     // set enviroment variables
     dotenv().ok();
+    if std::env::var("JWT_SECRET").is_err() {
+        std::env::set_var("JWT_SECRET", "test-secret-for-health-checks");
+    }
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     sqlx::PgPool::connect(&database_url)
