@@ -3,6 +3,7 @@ use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
+use tower_sessions::Session;
 use utoipa::ToSchema;
 
 use crate::auth::jwt::JwtConfig;
@@ -49,6 +50,7 @@ pub struct LoginUserResponse {
     tag = "Authentication"
 )]
 pub async fn handler(
+    session: Session,
     State(pool): State<PgPool>,
     State(jwt_config): State<JwtConfig>,
     axum::Json(payload): axum::Json<LoginUserRequest>,
@@ -60,15 +62,27 @@ pub async fn handler(
         }));
     }
 
-    let user_result = sqlx::query!(
-        "SELECT id, password_hash FROM users WHERE email = $1",
-        payload.email
-    )
-    .fetch_optional(&pool)
-    .await;
+    let email = payload.email.trim();
 
-    let (user_id, stored_hash) = match user_result {
-        Ok(Some(row)) => (row.id, row.password_hash),
+    let user_result = sqlx::query("SELECT password_hash, id FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(&pool)
+        .await;
+
+    let (stored_hash, serial_id) = match user_result {
+        Ok(Some(row)) => {
+            let (password_hashed, id): (String, i32) = match sqlx::FromRow::from_row(&row) {
+                Ok(data) => data,
+                Err(err) => {
+                    tracing::error!("Failed to parse user data during login: {}", err);
+                    return axum::response::Json(json!({
+                        "code": 500,
+                        "message": "An unexpected error occurred. Please try again later."
+                    }));
+                }
+            };
+            (password_hashed, id)
+        }
         Ok(None) => {
             return axum::response::Json(json!({
                 "code": 401,
@@ -91,16 +105,24 @@ pub async fn handler(
         }));
     }
 
-    let token = match jwt_config.encode_token(user_id, &payload.email) {
+    let token = match jwt_config.encode_token(serial_id, email) {
         Ok(t) => t,
         Err(err) => {
-            tracing::error!("Failed to issue JWT for user {}: {}", user_id, err);
+            tracing::error!("Failed to issue JWT for user {}: {}", serial_id, err);
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
             }));
         }
     };
+
+    if let Err(err) = session.insert("user_id", serial_id).await {
+        tracing::error!("Failed to create session during login: {}", err);
+        return axum::response::Json(json!({
+            "code": 500,
+            "message": "An unexpected error occurred. Please try again later."
+        }));
+    }
 
     axum::response::Json(json!({
         "code": 200,

@@ -16,10 +16,22 @@ async fn create_basic_pool() -> sqlx::PgPool {
         .expect("Failed to connect to the database")
 }
 
+async fn create_basic_session_layer(
+) -> tower_sessions::SessionManagerLayer<tower_sessions_sqlx_store::PostgresStore> {
+    let pool = create_basic_pool().await;
+    let session_store = tower_sessions_sqlx_store::PostgresStore::new(pool.clone());
+    session_store
+        .migrate()
+        .await
+        .expect("Failed to run migrations");
+    tower_sessions::SessionManagerLayer::new(session_store)
+}
+
 #[tokio::test]
 async fn health_returns_ok() {
     let pool = create_basic_pool().await;
-    let app = backend_website::app(pool);
+    let dummy_session = create_basic_session_layer().await;
+    let app = backend_website::app(pool, dummy_session);
 
     let response = app
         .oneshot(
@@ -40,7 +52,8 @@ async fn health_returns_ok() {
 #[tokio::test]
 async fn hello_returns_ok() {
     let pool = create_basic_pool().await;
-    let app = backend_website::app(pool);
+    let dummy_session = create_basic_session_layer().await;
+    let app = backend_website::app(pool, dummy_session);
 
     let response = app
         .oneshot(

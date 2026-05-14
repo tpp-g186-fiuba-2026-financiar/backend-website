@@ -9,6 +9,8 @@ use axum::{
     Router,
 };
 use sqlx::PgPool;
+use tower_sessions::SessionManagerLayer;
+use tower_sessions_sqlx_store::PostgresStore;
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
     Modify, OpenApi,
@@ -67,21 +69,31 @@ impl Modify for SecurityAddon {
 )]
 pub struct ApiDoc;
 
-pub fn app(pool: PgPool) -> Router {
+pub fn app(pool: PgPool, session_layer: SessionManagerLayer<PostgresStore>) -> Router {
     let jwt_config = JwtConfig::from_env();
-    app_with_state(AppState { pool, jwt_config })
+    app_with_state(AppState { pool, jwt_config }, session_layer)
 }
 
-pub fn app_with_state(state: AppState) -> Router {
+pub fn app_with_state(
+    state: AppState,
+    session_layer: SessionManagerLayer<PostgresStore>,
+) -> Router {
+    // Rutas abiertas (sin sesión ni JWT)
+    let normal_routes = Router::new()
+        .route("/hello", get(endpoints::hello::handler))
+        .route("/health", get(endpoints::health::handler))
+        .route("/register", post(registration_logic::handler));
+
+    // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
         .route("/user", get(get_user_logic::handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // /login usa session layer (server-side) además del JWT que devuelve en el body
     Router::new()
-        .route("/health", get(endpoints::health::handler))
-        .route("/hello", get(endpoints::hello::handler))
-        .route("/register", post(registration_logic::handler))
         .route("/login", post(login_logic::handler))
+        .layer(session_layer)
+        .merge(normal_routes)
         .merge(protected)
         .with_state(state)
 }
