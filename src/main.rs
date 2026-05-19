@@ -2,6 +2,7 @@ use axum::http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     HeaderValue, Method,
 };
+use axum_server::tls_rustls::RustlsConfig;
 use backend_website::{app, configuration::config::Config, database::db, ApiDoc};
 use dotenvy::dotenv;
 use std::{env, net::SocketAddr};
@@ -12,9 +13,18 @@ use tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+use rustls;
 
 #[tokio::main]
 async fn main() {
+    rustls::crypto::ring::default_provider().install_default()
+        .expect("Failed to install crypto provider");
+
+    let config = RustlsConfig::from_pem_file(
+        "cert.pem",
+        "key.pem",
+    ).await.unwrap();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -73,11 +83,8 @@ async fn main() {
     let router = app(pool, session_layer).layer(cors).merge(swagger);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
-    let listener = TcpListener::bind(addr)
-        .await
-        .expect("[Backend Website] Failed to bind to address");
 
-    tracing::info!("listening on {addr}");
+    tracing::info!("listening on https://0.0.0.0:{}", cfg.port);
 
     tokio::spawn(async move {
         // Lucas disclaimer: This delete is only visual, the actual deletion is handled by the tower_sessions library.
@@ -90,5 +97,9 @@ async fn main() {
             });
         }
     });
-    axum::serve(listener, router).await.unwrap();
+    
+    axum_server::bind_rustls(addr, config)
+        .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+        .await
+        .unwrap();
 }
