@@ -19,13 +19,11 @@ services:
     build: .
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://financiar:financiar@db:5432/financiar
-      RUST_LOG: info
-      ALLOWED_ORIGIN: http://localhost:5173
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - ./.env
 
 volumes:
   postgres_data:
