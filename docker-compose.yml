@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: financiar
       POSTGRES_DB: financiar
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - financiar_shared_network
 
   api:
     build: .
@@ -24,6 +26,12 @@ services:
         condition: service_healthy
     env_file:
       - ./.env
+    networks:
+      - financiar_shared_network
 
 volumes:
   postgres_data:
+
+networks:
+  financiar_shared_network:
+    external: true
