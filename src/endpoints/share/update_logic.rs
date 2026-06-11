@@ -17,16 +17,14 @@ use sqlx::PgPool;
     ),
     tag = "Share"
 )]
-pub async fn handler(
-    State(pool): State<PgPool>,
-) -> impl IntoResponse {
+pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
     let data_collector_url = std::env::var("DATA_COLLECTOR_URL").unwrap();
 
     let client = reqwest::Client::new();
-let response = client
-    .post(format!("{}/available-tickers", data_collector_url))
-    .send()
-    .await;
+    let response = client
+        .post(format!("{}/available-tickers", data_collector_url))
+        .send()
+        .await;
 
     let tickers = match response {
         Ok(res) => {
@@ -36,18 +34,23 @@ let response = client
                     tracing::error!("Failed to parse data collector response: {}", err);
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "code": 500, "message": "Failed to parse data collector response." })),
+                        Json(
+                            json!({ "code": 500, "message": "Failed to parse data collector response." }),
+                        ),
                     );
                 }
             };
             match body["message"]["tickers"].as_array() {
-                Some(t) => t.iter()
+                Some(t) => t
+                    .iter()
                     .filter_map(|v| v.as_str().map(|s| s.to_string()))
                     .collect::<Vec<_>>(),
                 None => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "code": 500, "message": "Unexpected response format from data collector." })),
+                        Json(
+                            json!({ "code": 500, "message": "Unexpected response format from data collector." }),
+                        ),
                     );
                 }
             }
@@ -78,5 +81,8 @@ let response = client
         }
     }
 
-    (StatusCode::OK, Json(json!({ "added": added, "total": total })))
+    (
+        StatusCode::OK,
+        Json(json!({ "added": added, "total": total })),
+    )
 }

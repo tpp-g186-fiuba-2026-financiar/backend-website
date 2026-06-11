@@ -32,9 +32,7 @@ pub struct ListAllSharesResponse {
     ),
     tag = "Share"
 )]
-pub async fn handler(
-    State(pool): State<PgPool>,
-) -> impl IntoResponse {
+pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
     let rows = sqlx::query_as::<_, (i32, String)>(
         r#"
         SELECT id, ticker

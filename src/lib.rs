@@ -19,20 +19,22 @@ use utoipa::{
 use crate::auth::jwt::JwtConfig;
 use crate::auth::middleware::require_auth;
 use crate::configuration::config::AppState;
-use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
-use crate::endpoints::user_share::get_logic::{self as user_share_get_logic, ListSharesResponse, ShareItem};
-use crate::endpoints::user_share::post_logic::{
-    self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
-};
-use crate::endpoints::user_share::put_logic::{
-    self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
-};
 use crate::endpoints::share::get_logic as share_get_logic;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
+};
+use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
+use crate::endpoints::user_share::get_logic::{
+    self as user_share_get_logic, ListSharesResponse, ShareItem,
+};
+use crate::endpoints::user_share::post_logic::{
+    self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
+};
+use crate::endpoints::user_share::put_logic::{
+    self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
 
 pub struct SecurityAddon;
