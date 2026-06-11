@@ -110,7 +110,10 @@ pub fn app_with_state(
 
     // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
-        .route("/user", get(get_user_logic::handler))
+        .route(
+            "/user",
+            get(get_user_logic::handler).delete(user_delete_logic::handler),
+        )
         .route(
             "/user/shares",
             post(user_share_post_logic::handler).get(user_share_get_logic::handler),
