@@ -27,6 +27,7 @@ use crate::endpoints::share::post_logic::{
 use crate::endpoints::share::put_logic::{
     self as share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
+use crate::endpoints::share::get_all_logic as share_get_all_logic;
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
@@ -101,7 +102,8 @@ pub fn app_with_state(
     let normal_routes = Router::new()
         .route("/hello", get(endpoints::hello::handler))
         .route("/health", get(endpoints::health::handler))
-        .route("/register", post(registration_logic::handler));
+        .route("/register", post(registration_logic::handler))
+        .route("/all_shares", get(share_get_all_logic::handler));
 
     // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
