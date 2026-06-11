@@ -324,6 +324,41 @@
         ]
       }
     },
+    "/shares/all": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "List of all available share tickers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAllSharesResponse"
+                },
+                "example": {
+                  "shares": [
+                    {
+                      "id": 1,
+                      "ticker": "GGAL"
+                    },
+                    {
+                      "id": 2,
+                      "ticker": "YPF"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/shares/{id}": {
       "put": {
         "tags": [
@@ -467,31 +502,6 @@
             "bearer_auth": []
           }
         ]
-      },
-      "delete": {
-        "tags": [
-          "User"
-        ],
-        "operationId": "handler",
-        "responses": {
-          "204": {
-            "description": "Authenticated user (and all related data) deleted successfully"
-          },
-          "401": {
-            "description": "Missing or invalid authentication token"
-          },
-          "404": {
-            "description": "Authenticated user no longer exists"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
       }
     }
   },
@@ -612,6 +622,20 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "ListAllSharesResponse": {
+        "type": "object",
+        "required": [
+          "shares"
+        ],
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareTickerItem"
+            }
           }
         }
       },
@@ -744,6 +768,22 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "ShareTickerItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "ticker"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
           }
         }
       },
