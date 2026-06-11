@@ -467,6 +467,31 @@
             "bearer_auth": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "204": {
+            "description": "Authenticated user (and all related data) deleted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Authenticated user no longer exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     }
   },
