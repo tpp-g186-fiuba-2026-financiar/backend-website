@@ -5,7 +5,7 @@ pub mod endpoints;
 
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use sqlx::PgPool;
@@ -19,6 +19,14 @@ use utoipa::{
 use crate::auth::jwt::JwtConfig;
 use crate::auth::middleware::require_auth;
 use crate::configuration::config::AppState;
+use crate::endpoints::share::delete_logic as share_delete_logic;
+use crate::endpoints::share::get_logic::{self as share_get_logic, ListSharesResponse, ShareItem};
+use crate::endpoints::share::post_logic::{
+    self as share_post_logic, CreateShareRequest, CreateShareResponse,
+};
+use crate::endpoints::share::put_logic::{
+    self as share_put_logic, UpdateShareRequest, UpdateShareResponse,
+};
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
@@ -50,6 +58,10 @@ impl Modify for SecurityAddon {
         endpoints::user::registration::registration_logic::handler,
         endpoints::user::login_logic::handler,
         endpoints::user::get_user_logic::handler,
+        endpoints::share::post_logic::handler,
+        endpoints::share::get_logic::handler,
+        endpoints::share::put_logic::handler,
+        endpoints::share::delete_logic::handler,
     ),
     components(
         schemas(
@@ -58,12 +70,19 @@ impl Modify for SecurityAddon {
             LoginUserRequest,
             LoginUserResponse,
             GetUserResponse,
+            CreateShareRequest,
+            CreateShareResponse,
+            ListSharesResponse,
+            ShareItem,
+            UpdateShareRequest,
+            UpdateShareResponse,
         )
     ),
     modifiers(&SecurityAddon),
     tags(
         (name = "Authentication", description = "Endpoints for user identity management"),
         (name = "User", description = "Endpoints for retrieving authenticated user information"),
+        (name = "Share", description = "Endpoints for managing the authenticated user's declared stock portfolio"),
         (name = "General", description = "General endpoints for knowing the status of the backend and other general information")
     ),
 )]
@@ -87,6 +106,14 @@ pub fn app_with_state(
     // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
         .route("/user", get(get_user_logic::handler))
+        .route(
+            "/shares",
+            post(share_post_logic::handler).get(share_get_logic::handler),
+        )
+        .route(
+            "/shares/{id}",
+            put(share_put_logic::handler).delete(share_delete_logic::handler),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
