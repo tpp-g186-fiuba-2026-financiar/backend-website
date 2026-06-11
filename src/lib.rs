@@ -27,6 +27,7 @@ use crate::endpoints::share::post_logic::{
 use crate::endpoints::share::put_logic::{
     self as share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
+use crate::endpoints::user::delete_logic as user_delete_logic;
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
@@ -58,6 +59,7 @@ impl Modify for SecurityAddon {
         endpoints::user::registration::registration_logic::handler,
         endpoints::user::login_logic::handler,
         endpoints::user::get_user_logic::handler,
+        endpoints::user::delete_logic::handler,
         endpoints::share::post_logic::handler,
         endpoints::share::get_logic::handler,
         endpoints::share::put_logic::handler,
@@ -105,7 +107,10 @@ pub fn app_with_state(
 
     // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
-        .route("/user", get(get_user_logic::handler))
+        .route(
+            "/user",
+            get(get_user_logic::handler).delete(user_delete_logic::handler),
+        )
         .route(
             "/shares",
             post(share_post_logic::handler).get(share_get_logic::handler),
