@@ -230,6 +230,203 @@
         }
       }
     },
+    "/shares": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "List of shares declared by the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSharesResponse"
+                },
+                "example": {
+                  "shares": [
+                    {
+                      "created_at": "2026-05-28T12:00:00Z",
+                      "id": 1,
+                      "quantity": 10,
+                      "ticker": "GGAL",
+                      "user_id": 42
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Share added to the authenticated user's portfolio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateShareResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-28T12:00:00Z",
+                  "id": 1,
+                  "quantity": 10,
+                  "ticker": "GGAL",
+                  "user_id": 42
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "The authenticated user already has this ticker in their portfolio"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/shares/{id}": {
+      "put": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the share to update",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Share updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateShareResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-28T12:00:00Z",
+                  "id": 1,
+                  "quantity": 25,
+                  "ticker": "GGAL",
+                  "user_id": 42
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Share not found for the authenticated user"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the share to delete",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Share deleted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Share not found for the authenticated user"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user": {
       "get": {
         "tags": [
@@ -275,6 +472,55 @@
   },
   "components": {
     "schemas": {
+      "CreateShareRequest": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "quantity"
+        ],
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "example": 10
+          },
+          "ticker": {
+            "type": "string",
+            "example": "GGAL"
+          }
+        }
+      },
+      "CreateShareResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "GetUserResponse": {
         "type": "object",
         "required": [
@@ -341,6 +587,20 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "ListSharesResponse": {
+        "type": "object",
+        "required": [
+          "shares"
+        ],
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareItem"
+            }
           }
         }
       },
@@ -430,6 +690,81 @@
             "type": "string"
           }
         }
+      },
+      "ShareItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UpdateShareRequest": {
+        "type": "object",
+        "required": [
+          "quantity"
+        ],
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "example": 25
+          }
+        }
+      },
+      "UpdateShareResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -448,6 +783,10 @@
     {
       "name": "User",
       "description": "Endpoints for retrieving authenticated user information"
+    },
+    {
+      "name": "Share",
+      "description": "Endpoints for managing the authenticated user's declared stock portfolio"
     },
     {
       "name": "General",
