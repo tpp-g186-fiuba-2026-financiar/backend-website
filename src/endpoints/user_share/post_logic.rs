@@ -97,26 +97,47 @@ pub async fn handler(
         );
     }
 
-    let insert_result = sqlx::query_as::<_, (i32, i32, String, i32, DateTime<Utc>)>(
+    let rows = sqlx::query_as::<_, (i32, String)>(
         r#"
-        INSERT INTO shares (user_id, ticker, quantity)
-        VALUES ($1, $2, $3)
-        RETURNING id, user_id, ticker, quantity, created_at
+        SELECT id, ticker
+        FROM shares
+        WHERE ticker = $1
         "#,
     )
-    .bind(auth_user.user_id)
-    .bind(&ticker)
-    .bind(payload.quantity)
+    .bind(ticker)
     .fetch_one(&pool)
     .await;
 
+    let row = match rows {
+        Ok(row) => row,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "code": 404, "message": "Ticker not found." })),
+            );
+        }
+    };
+    let share_id = row.0;
+
+    let insert_result = sqlx::query_as::<_, (i32, i32, i32, i32, DateTime<Utc>)>(
+        r#"
+        INSERT INTO user_shares (user_id, share_id, quantity)
+        VALUES ($1, $2, $3)
+        RETURNING id, user_id, share_id, quantity, created_at
+        "#,
+    )
+    .bind(auth_user.user_id)
+    .bind(&share_id)
+    .bind(payload.quantity)
+    .fetch_one(&pool)
+    .await;
     match insert_result {
-        Ok((id, user_id, ticker, quantity, created_at)) => (
+        Ok((id, user_id, share_id, quantity, created_at)) => (
             StatusCode::CREATED,
             Json(json!({
                 "id": id,
                 "user_id": user_id,
-                "ticker": ticker,
+                "share_id": share_id,
                 "quantity": quantity,
                 "created_at": created_at,
             })),
