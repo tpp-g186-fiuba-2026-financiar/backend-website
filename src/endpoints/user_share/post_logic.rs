@@ -127,7 +127,7 @@ pub async fn handler(
         "#,
     )
     .bind(auth_user.user_id)
-    .bind(&share_id)
+    .bind(share_id)
     .bind(payload.quantity)
     .fetch_one(&pool)
     .await;
