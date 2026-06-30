@@ -38,7 +38,7 @@ pub async fn handler(
     Extension(auth_user): Extension<AuthUser>,
     Path(share_id): Path<i32>,
 ) -> impl IntoResponse {
-    let result = sqlx::query("DELETE FROM shares WHERE id = $1 AND user_id = $2")
+    let result = sqlx::query("DELETE FROM user_shares WHERE id = $1 AND user_id = $2")
         .bind(share_id)
         .bind(auth_user.user_id)
         .execute(&pool)

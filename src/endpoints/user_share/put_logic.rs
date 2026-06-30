@@ -80,10 +80,11 @@ pub async fn handler(
 
     let result = sqlx::query_as::<_, (i32, i32, String, i32, DateTime<Utc>)>(
         r#"
-        UPDATE shares
+        UPDATE user_shares us
         SET quantity = $1
-        WHERE id = $2 AND user_id = $3
-        RETURNING id, user_id, ticker, quantity, created_at
+        FROM shares s
+        WHERE us.id = $2 AND us.user_id = $3 AND s.id = us.share_id
+        RETURNING us.id, us.user_id, s.ticker, us.quantity, us.created_at
         "#,
     )
     .bind(payload.quantity)

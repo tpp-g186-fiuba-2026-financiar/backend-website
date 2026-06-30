@@ -54,10 +54,11 @@ pub async fn handler(
 ) -> impl IntoResponse {
     let rows = sqlx::query_as::<_, (i32, i32, String, i32, DateTime<Utc>)>(
         r#"
-        SELECT id, user_id, ticker, quantity, created_at
-        FROM shares
-        WHERE user_id = $1
-        ORDER BY created_at ASC
+        SELECT us.id, us.user_id, s.ticker, us.quantity, us.created_at
+        FROM user_shares us
+        JOIN shares s ON s.id = us.share_id
+        WHERE us.user_id = $1
+        ORDER BY us.created_at ASC
         "#,
     )
     .bind(auth_user.user_id)
