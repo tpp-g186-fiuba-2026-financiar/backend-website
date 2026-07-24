@@ -37,6 +37,9 @@ use crate::endpoints::user_share::post_logic::{
 use crate::endpoints::user_share::put_logic::{
     self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
+use crate::endpoints::user_share::trend_logic::{
+    self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
+};
 
 pub struct SecurityAddon;
 
@@ -67,6 +70,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::post_logic::handler,
         endpoints::user_share::delete_logic::handler,
         endpoints::user_share::put_logic::handler,
+        endpoints::user_share::trend_logic::handler,
         endpoints::share::get_logic::handler,
     ),
     components(
@@ -82,6 +86,8 @@ impl Modify for SecurityAddon {
             ShareItem,
             UpdateShareRequest,
             UpdateShareResponse,
+            ListTrendsResponse,
+            ShareTrendItem,
         )
     ),
     modifiers(&SecurityAddon),
@@ -125,6 +131,7 @@ pub fn app_with_state(
             "/user/shares/{id}",
             put(user_share_put_logic::handler).delete(user_share_delete_logic::handler),
         )
+        .route("/user/shares/trends", get(user_share_trend_logic::handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
