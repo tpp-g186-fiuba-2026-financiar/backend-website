@@ -523,24 +523,28 @@
                     {
                       "as_of": "2026-06-17",
                       "available": true,
+                      "condition": "neutral",
                       "horizon_days": 5,
                       "last_close": 8365.0,
                       "model": "lstm",
                       "model_version": "lstm-20260618T003942Z",
                       "predicted_close": 8511.82,
                       "reason": null,
+                      "rsi": 58.3,
                       "signal": "alza",
                       "ticker": "GGAL"
                     },
                     {
                       "as_of": null,
                       "available": false,
+                      "condition": null,
                       "horizon_days": null,
                       "last_close": null,
                       "model": null,
                       "model_version": null,
                       "predicted_close": null,
                       "reason": "No se pudo contactar a api-ml",
+                      "rsi": null,
                       "signal": null,
                       "ticker": "YPFD"
                     }
@@ -876,6 +880,12 @@
           "available": {
             "type": "boolean"
           },
+          "condition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "horizon_days": {
             "type": [
               "integer",
@@ -914,6 +924,13 @@
               "string",
               "null"
             ]
+          },
+          "rsi": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           },
           "signal": {
             "type": [
