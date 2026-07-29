@@ -108,7 +108,19 @@ pub async fn handler(
 
     let mut trends = Vec::with_capacity(tickers.len());
     if !tickers.is_empty() {
-        let api_ml_url = std::env::var("API_ML_URL").unwrap();
+        let api_ml_url = match std::env::var("API_ML_URL") {
+            Ok(url) => url,
+            Err(_) => {
+                tracing::error!("API_ML_URL no esta configurada");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "code": 500,
+                        "message": "An unexpected error occurred. Please try again later."
+                    })),
+                );
+            }
+        };
         let client = reqwest::Client::new();
         for ticker in tickers {
             trends.push(fetch_trend(&client, &api_ml_url, &ticker).await);
