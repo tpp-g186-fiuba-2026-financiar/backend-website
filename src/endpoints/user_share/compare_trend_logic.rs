@@ -1,6 +1,4 @@
-use axum::{
-    extract::Path, http::StatusCode, response::IntoResponse, Extension, Json,
-};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Extension, Json};
 use serde::Serialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
