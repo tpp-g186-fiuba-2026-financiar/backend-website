@@ -566,10 +566,121 @@
           }
         ]
       }
+    },
+    "/user/shares/{ticker}/trends/compare": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker a comparar (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prediccion de tendencia de todos los modelos que api-ml corre en paralelo (lstm, xgboost, transformer, arima, y las variantes -modal si estan configuradas), lado a lado sobre el mismo historico",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareTrendsResponse"
+                },
+                "example": {
+                  "as_of": "2026-07-28",
+                  "default_model": "lstm",
+                  "predictions": {
+                    "lstm": {
+                      "as_of": "2026-07-28",
+                      "available": true,
+                      "condition": "neutral",
+                      "horizon_days": 5,
+                      "last_close": 8365.0,
+                      "model": "lstm",
+                      "model_version": "lstm-20260618T003942Z",
+                      "predicted_close": 8511.82,
+                      "reason": null,
+                      "rsi": 58.3,
+                      "signal": "alza"
+                    },
+                    "transformer": {
+                      "as_of": null,
+                      "available": false,
+                      "condition": null,
+                      "horizon_days": null,
+                      "last_close": null,
+                      "model": null,
+                      "model_version": null,
+                      "predicted_close": null,
+                      "reason": "modelo no entrenado",
+                      "rsi": null,
+                      "signal": null
+                    }
+                  },
+                  "symbol": "GGAL"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "CompareTrendsResponse": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "predictions"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predictions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModelPredictionItem"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "symbol": {
+            "type": "string"
+          }
+        }
+      },
       "CreateShareRequest": {
         "type": "object",
         "required": [
@@ -763,6 +874,81 @@
             "type": "string"
           },
           "token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ModelPredictionItem": {
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "condition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horizon_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predicted_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rsi": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "signal": {
             "type": [
               "string",
               "null"
