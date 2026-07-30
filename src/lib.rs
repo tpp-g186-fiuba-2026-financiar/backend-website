@@ -27,6 +27,9 @@ use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserRespo
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
 };
+use crate::endpoints::user_share::compare_trend_logic::{
+    self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
+};
 use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
 use crate::endpoints::user_share::get_logic::{
     self as user_share_get_logic, ListSharesResponse, ShareItem,
@@ -71,6 +74,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::delete_logic::handler,
         endpoints::user_share::put_logic::handler,
         endpoints::user_share::trend_logic::handler,
+        endpoints::user_share::compare_trend_logic::handler,
         endpoints::share::get_logic::handler,
     ),
     components(
@@ -88,6 +92,8 @@ impl Modify for SecurityAddon {
             UpdateShareResponse,
             ListTrendsResponse,
             ShareTrendItem,
+            CompareTrendsResponse,
+            ModelPredictionItem,
         )
     ),
     modifiers(&SecurityAddon),
@@ -132,6 +138,10 @@ pub fn app_with_state(
             put(user_share_put_logic::handler).delete(user_share_delete_logic::handler),
         )
         .route("/user/shares/trends", get(user_share_trend_logic::handler))
+        .route(
+            "/user/shares/{ticker}/trends/compare",
+            get(user_share_compare_trend_logic::handler),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
