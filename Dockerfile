@@ -4,6 +4,7 @@ COPY Cargo.toml .
 COPY src ./src
 COPY .sqlx ./.sqlx
 COPY migrations ./migrations
+COPY static ./static
 ENV SQLX_OFFLINE=true
 
 RUN cargo build --release
