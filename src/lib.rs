@@ -123,6 +123,35 @@ pub fn app_with_state(
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/update", get(share_update_logic::handler));
 
+    // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
+    // (tarjetas anonimas a proposito), protegido por un PIN compartido
+    // (`endpoints::retro::pin`) en vez de por sesion de usuario. A proposito
+    // no esta en `ApiDoc` (no aparece en /swagger).
+    let retro_routes = Router::new()
+        .route("/retro", get(endpoints::retro::page::handler))
+        .route("/retro/api/board", get(endpoints::retro::board_logic::handler))
+        .route("/retro/api/cards", post(endpoints::retro::cards_logic::create))
+        .route(
+            "/retro/api/cards/{id}",
+            axum::routing::delete(endpoints::retro::cards_logic::delete),
+        )
+        .route(
+            "/retro/api/archive",
+            post(endpoints::retro::archive_logic::create),
+        )
+        .route(
+            "/retro/api/undo",
+            post(endpoints::retro::archive_logic::undo),
+        )
+        .route(
+            "/retro/api/archives",
+            get(endpoints::retro::archive_logic::list),
+        )
+        .route(
+            "/retro/api/archives/{id}",
+            get(endpoints::retro::archive_logic::get_one),
+        );
+
     // Rutas protegidas por JWT (middleware)
     let protected = Router::new()
         .route(
@@ -150,5 +179,6 @@ pub fn app_with_state(
         .layer(session_layer)
         .merge(normal_routes)
         .merge(protected)
+        .merge(retro_routes)
         .with_state(state)
 }

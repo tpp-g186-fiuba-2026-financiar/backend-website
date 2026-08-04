@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Retro del equipo</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14181c;
+    --surface: #1e242b;
+    --border: #2c343d;
+    --text: #e6e9ec;
+    --text-dim: #8b96a1;
+    --accent: #4f9dd1;
+    --danger: #d16b6b;
+    --c-bien: #4f9d72;
+    --c-mejorar: #d3a53f;
+    --c-acciones: #b389d1;
+    --c-preguntas: #4fb0b8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 1.4rem; margin: 0; display: flex; align-items: baseline; gap: 10px; }
+  .sprint-badge {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 3px 12px;
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sprint-badge button {
+    border: none; background: none; color: var(--text-dim);
+    padding: 0 2px; font-size: 0.95rem; line-height: 1; cursor: pointer;
+  }
+  .sprint-badge button:hover { color: var(--accent); }
+  .sub { color: var(--text-dim); font-size: 0.85rem; margin: 4px 0 20px; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+  .actions { display: flex; gap: 8px; }
+  button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0c1216; font-weight: 600; }
+  button.ghost:hover { border-color: var(--danger); color: var(--danger); }
+  .board { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--col-color, var(--border));
+    border-radius: 10px;
+    padding: 14px;
+    flex: 1 1 250px;
+    min-width: 230px;
+  }
+  .column[data-column="bien"] { --col-color: var(--c-bien); }
+  .column[data-column="mejorar"] { --col-color: var(--c-mejorar); }
+  .column[data-column="acciones"] { --col-color: var(--c-acciones); }
+  .column[data-column="preguntas"] { --col-color: var(--c-preguntas); }
+  .column-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .column-head h2 { font-size: 0.92rem; margin: 0; }
+  .count {
+    font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--text-dim);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 99px;
+    padding: 1px 8px; min-width: 18px; text-align: center;
+  }
+  .cards { min-height: 6px; }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--col-color, var(--border));
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .card span { white-space: pre-wrap; word-break: break-word; }
+  .card button { border: none; background: none; color: var(--text-dim); padding: 0 2px; font-size: 0.9rem; }
+  .card button:hover { color: var(--danger); }
+  .add-row { display: flex; gap: 6px; margin-top: 6px; }
+  .add-row textarea {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 34px;
+  }
+  #archives { margin-top: 28px; }
+  #archives h2 { font-size: 1rem; }
+  .archive-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .archive-item:hover { border-color: var(--accent); }
+  .archive-detail { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: none; }
+  .archive-detail.open { display: block; }
+  .archive-detail .board { margin-top: 8px; }
+  .archive-detail .column { background: var(--bg); }
+  .pin-gate {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+  }
+  .pin-gate input {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; font-size: 1rem; text-align: center;
+  }
+  #status { color: var(--text-dim); font-size: 0.8rem; min-height: 1em; margin: 10px 0 4px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="pin-gate">
+  <div>Retro del equipo</div>
+  <input id="pinInput" type="password" placeholder="PIN" autofocus />
+  <button class="primary" id="pinSubmit">Entrar</button>
+</div>
+
+<div id="app" style="display:none">
+  <div class="topbar">
+    <div>
+      <h1>Retro del equipo <span class="sprint-badge">Sprint <span id="sprintNum">–</span></span></h1>
+      <p class="sub">Las tarjetas son anónimas. Nadie ve quién escribió qué.</p>
+    </div>
+    <div class="actions">
+      <button id="undoBtn" class="ghost">Deshacer último archivo</button>
+      <button id="archiveBtn" class="primary">Archivar y pasar de sprint</button>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="board" id="board">
+    <div class="column" data-column="bien">
+      <div class="column-head"><h2>Hicimos bien</h2><span class="count" data-count="bien">0</span></div>
+      <div class="cards"></div>
+      <div class="add-row">
+        <textarea placeholder="Agregar..."></textarea>
+        <button class="primary add-btn">+</button>
+      </div>
+    </div>
+    <div class="column" data-column="mejorar">
+      <div class="column-head"><h2>Podemos mejorar</h2><span class="count" data-count="mejorar">0</span></div>
+      <div class="cards"></div>
+      <div class="add-row">
+        <textarea placeholder="Agregar..."></textarea>
+        <button class="primary add-btn">+</button>
+      </div>
+    </div>
+    <div class="column" data-column="acciones">
+      <div class="column-head"><h2>Qué vamos a hacer para mejorar</h2><span class="count" data-count="acciones">0</span></div>
+      <div class="cards"></div>
+      <div class="add-row">
+        <textarea placeholder="Agregar..."></textarea>
+        <button class="primary add-btn">+</button>
+      </div>
+    </div>
+    <div class="column" data-column="preguntas">
+      <div class="column-head"><h2>Preguntas</h2><span class="count" data-count="preguntas">0</span></div>
+      <div class="cards"></div>
+      <div class="add-row">
+        <textarea placeholder="Agregar..."></textarea>
+        <button class="primary add-btn">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="archives">
+    <h2>Retros anteriores</h2>
+    <div id="archiveList"></div>
+  </div>
+</div>
+
+<script>
+const COLUMNS = [
+  ["bien", "Hicimos bien"],
+  ["mejorar", "Podemos mejorar"],
+  ["acciones", "Qué vamos a hacer para mejorar"],
+  ["preguntas", "Preguntas"],
+];
+
+function getPin() { return localStorage.getItem("retroPin") || ""; }
+function setPin(p) { localStorage.setItem("retroPin", p); }
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "X-Retro-Pin": getPin(), ...(opts.headers || {}) },
+  });
+  if (res.status === 401 || res.status === 503) {
+    localStorage.removeItem("retroPin");
+    document.getElementById("gate").style.display = "flex";
+    document.getElementById("app").style.display = "none";
+    throw new Error("pin invalido");
+  }
+  return res;
+}
+
+function setStatus(msg, isError = false) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.style.color = isError ? "var(--danger)" : "var(--text-dim)";
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 4000);
+}
+
+function cardEl(card) {
+  const div = document.createElement("div");
+  div.className = "card";
+  const span = document.createElement("span");
+  span.textContent = card.content;
+  const btn = document.createElement("button");
+  btn.textContent = "×";
+  btn.title = "Borrar";
+  btn.onclick = () => deleteCard(card.id);
+  div.appendChild(span);
+  div.appendChild(btn);
+  return div;
+}
+
+async function loadBoard() {
+  const res = await api("/retro/api/board");
+  const data = await res.json();
+  document.getElementById("sprintNum").textContent = data.sprint;
+  for (const [col] of COLUMNS) {
+    const container = document.querySelector(`.column[data-column="${col}"] .cards`);
+    container.innerHTML = "";
+    const cards = data[col] || [];
+    cards.forEach((card) => container.appendChild(cardEl(card)));
+    document.querySelector(`.count[data-count="${col}"]`).textContent = cards.length;
+  }
+}
+
+async function addCard(column, content) {
+  if (!content.trim()) return;
+  await api("/retro/api/cards", { method: "POST", body: JSON.stringify({ column, content }) });
+  await loadBoard();
+}
+
+async function deleteCard(id) {
+  await api(`/retro/api/cards/${id}`, { method: "DELETE" });
+  await loadBoard();
+}
+
+async function archiveBoard() {
+  const label = prompt("Etiqueta para este archivo (vacío = \"Sprint N\"):", "");
+  if (label === null) return;
+  const res = await api("/retro/api/archive", { method: "POST", body: JSON.stringify({ label: label || null }) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    setStatus(body.message || "No se pudo archivar", true);
+    return;
+  }
+  setStatus(`Sprint ${body.sprint} archivado. Ahora estás en el sprint ${body.next_sprint}.`);
+  await loadBoard();
+  await loadArchives();
+}
+
+async function undoLast() {
+  if (!confirm("¿Deshacer el último archivo? Vuelve las tarjetas al tablero y baja el número de sprint.")) return;
+  const res = await api("/retro/api/undo", { method: "POST" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    setStatus(body.message || "No se pudo deshacer", true);
+    return;
+  }
+  setStatus(`Deshecho. Volviste al sprint ${body.sprint}.`);
+  await loadBoard();
+  await loadArchives();
+}
+
+function renderSnapshotBoard(snapshot) {
+  const wrap = document.createElement("div");
+  wrap.className = "board";
+  for (const [col, title] of COLUMNS) {
+    const colDiv = document.createElement("div");
+    colDiv.className = "column";
+    colDiv.dataset.column = col;
+    const head = document.createElement("div");
+    head.className = "column-head";
+    head.innerHTML = `<h2>${title}</h2>`;
+    colDiv.appendChild(head);
+    const cardsDiv = document.createElement("div");
+    cardsDiv.className = "cards";
+    (snapshot[col] || []).forEach((card) => {
+      const div = document.createElement("div");
+      div.className = "card";
+      const span = document.createElement("span");
+      span.textContent = card.content;
+      div.appendChild(span);
+      cardsDiv.appendChild(div);
+    });
+    colDiv.appendChild(cardsDiv);
+    wrap.appendChild(colDiv);
+  }
+  return wrap;
+}
+
+async function loadArchives() {
+  const res = await api("/retro/api/archives");
+  const data = await res.json();
+  const list = document.getElementById("archiveList");
+  list.innerHTML = "";
+  data.archives.forEach((a) => {
+    const item = document.createElement("div");
+    item.className = "archive-item";
+    const date = new Date(a.archived_at).toLocaleString();
+    item.innerHTML = `<strong>${a.label}</strong> <span style="color:var(--text-dim)">— sprint ${a.sprint} — ${date}</span>`;
+    const detail = document.createElement("div");
+    detail.className = "archive-detail";
+    item.appendChild(detail);
+    item.onclick = async () => {
+      if (detail.classList.contains("open")) {
+        detail.classList.remove("open");
+        return;
+      }
+      if (!detail.dataset.loaded) {
+        const r = await api(`/retro/api/archives/${a.id}`);
+        const full = await r.json();
+        detail.appendChild(renderSnapshotBoard(full.snapshot));
+        detail.dataset.loaded = "1";
+      }
+      detail.classList.add("open");
+    };
+    list.appendChild(item);
+  });
+}
+
+function wireAddButtons() {
+  document.querySelectorAll(".column").forEach((col) => {
+    const column = col.dataset.column;
+    const textarea = col.querySelector("textarea");
+    const btn = col.querySelector(".add-btn");
+    const submit = () => {
+      addCard(column, textarea.value);
+      textarea.value = "";
+    };
+    btn.onclick = submit;
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+  });
+}
+
+async function boot() {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  wireAddButtons();
+  document.getElementById("archiveBtn").onclick = archiveBoard;
+  document.getElementById("undoBtn").onclick = undoLast;
+  try {
+    await loadBoard();
+    await loadArchives();
+  } catch (e) {
+    // el pin era invalido, api() ya volvio a mostrar el gate
+  }
+}
+
+document.getElementById("pinSubmit").onclick = () => {
+  const val = document.getElementById("pinInput").value;
+  if (!val) return;
+  setPin(val);
+  boot();
+};
+document.getElementById("pinInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("pinSubmit").click();
+});
+
+if (getPin()) {
+  boot();
+}
+</script>
+</body>
+</html>
