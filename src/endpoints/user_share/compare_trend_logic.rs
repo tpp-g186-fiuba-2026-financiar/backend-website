@@ -23,6 +23,7 @@ pub struct ModelPredictionItem {
     pub as_of: Option<String>,
     pub model: Option<String>,
     pub model_version: Option<String>,
+    pub backtest: Option<Value>,
     pub reason: Option<String>,
 }
 
@@ -134,6 +135,7 @@ async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value
                             "as_of": null,
                             "model": "arima-modal",
                             "model_version": body.get("model_version"),
+                            "backtest": body.get("backtest"),
                             "reason": null
                         })
                     }
@@ -192,6 +194,7 @@ fn unavailable(reason: &str) -> Value {
         "as_of": null,
         "model": null,
         "model_version": null,
+        "backtest": null,
         "reason": reason
     })
 }
