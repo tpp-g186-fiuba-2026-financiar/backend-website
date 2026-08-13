@@ -34,6 +34,7 @@ use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
 use crate::endpoints::user_share::get_logic::{
     self as user_share_get_logic, ListSharesResponse, ShareItem,
 };
+use crate::endpoints::user_share::history_logic::{HistoricalPricePoint, ShareHistoryResponse};
 use crate::endpoints::user_share::post_logic::{
     self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
 };
@@ -75,6 +76,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::put_logic::handler,
         endpoints::user_share::trend_logic::handler,
         endpoints::user_share::compare_trend_logic::handler,
+        endpoints::user_share::history_logic::handler,
         endpoints::share::get_logic::handler,
     ),
     components(
@@ -94,6 +96,8 @@ impl Modify for SecurityAddon {
             ShareTrendItem,
             CompareTrendsResponse,
             ModelPredictionItem,
+            ShareHistoryResponse,
+            HistoricalPricePoint,
         )
     ),
     modifiers(&SecurityAddon),
@@ -170,6 +174,10 @@ pub fn app_with_state(
         .route(
             "/user/shares/{ticker}/trends/compare",
             get(user_share_compare_trend_logic::handler),
+        )
+        .route(
+            "/user/shares/{ticker}/history",
+            get(endpoints::user_share::history_logic::handler),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, Json};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -31,7 +33,7 @@ pub struct ListTrendsResponse {
     get,
     path = "/user/shares/trends",
     responses(
-        (status = 200, description = "Trend prediction (api-ml) for each stock declared by the authenticated user", body = ListTrendsResponse, example = json!({
+        (status = 200, description = "Trend prediction (Modal) for each stock declared by the authenticated user", body = ListTrendsResponse, example = json!({
             "trends": [
                 {
                     "ticker": "GGAL",
@@ -108,44 +110,33 @@ pub async fn handler(
 
     let mut trends = Vec::with_capacity(tickers.len());
     if !tickers.is_empty() {
-        let api_ml_url = match std::env::var("API_ML_URL") {
-            Ok(url) => url,
-            Err(_) => {
-                tracing::error!("API_ML_URL no esta configurada");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({
-                        "code": 500,
-                        "message": "An unexpected error occurred. Please try again later."
-                    })),
-                );
-            }
-        };
-        let client = reqwest::Client::new();
+        let modal_lstm_url = std::env::var("MODAL_LSTM_URL")
+            .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-main.modal.run".into());
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(90))
+            .build()
+            .expect("reqwest client");
         for ticker in tickers {
-            trends.push(fetch_trend(&client, &api_ml_url, &ticker).await);
+            trends.push(fetch_trend(&client, &modal_lstm_url, &ticker).await);
         }
     }
 
     (StatusCode::OK, Json(json!({ "trends": trends })))
 }
 
-/// Pide la tendencia de un ticker a api-ml. Si falla (caido, timeout, ticker
+/// Pide la tendencia de un ticker al LSTM productivo de Modal. Si falla (caido, timeout, ticker
 /// sin modelo entrenado, etc.) no corta el resto: devuelve un item marcado
 /// como no disponible en vez de tirar 500 para todos los demas tickers.
-async fn fetch_trend(client: &reqwest::Client, api_ml_url: &str, ticker: &str) -> Value {
+async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticker: &str) -> Value {
     let response = client
-        .get(format!(
-            "{}/predict/trend/{}",
-            api_ml_url.trim_end_matches('/'),
-            ticker
-        ))
+        .get(modal_url)
+        .query(&[("ticker", ticker), ("horizon", "5")])
         .send()
         .await;
 
     match response {
         Ok(res) if res.status().is_success() => match res.json::<Value>().await {
-            Ok(body) => json!({
+            Ok(body) if body.get("error").is_none() => json!({
                 "ticker": ticker,
                 "available": true,
                 "signal": body.get("signal"),
@@ -155,22 +146,28 @@ async fn fetch_trend(client: &reqwest::Client, api_ml_url: &str, ticker: &str) -
                 "last_close": body.get("last_close"),
                 "predicted_close": body.get("predicted_close"),
                 "as_of": body.get("as_of"),
-                "model": body.get("model"),
+                "model": "lstm-modal",
                 "model_version": body.get("model_version"),
                 "reason": Value::Null,
             }),
+            Ok(body) => unavailable(
+                ticker,
+                body.get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Modal devolvio una respuesta invalida"),
+            ),
             Err(err) => {
-                tracing::error!("Respuesta invalida de api-ml para {}: {}", ticker, err);
-                unavailable(ticker, "Respuesta invalida de api-ml")
+                tracing::error!("Respuesta invalida de Modal para {}: {}", ticker, err);
+                unavailable(ticker, "Respuesta invalida de Modal")
             }
         },
         Ok(res) => {
-            tracing::warn!("api-ml respondio {} para {}", res.status(), ticker);
-            unavailable(ticker, "api-ml no pudo predecir para este ticker")
+            tracing::warn!("Modal respondio {} para {}", res.status(), ticker);
+            unavailable(ticker, "Modal no pudo predecir para este ticker")
         }
         Err(err) => {
-            tracing::error!("No se pudo contactar a api-ml para {}: {}", ticker, err);
-            unavailable(ticker, "No se pudo contactar a api-ml")
+            tracing::error!("No se pudo contactar a Modal para {}: {}", ticker, err);
+            unavailable(ticker, "No se pudo contactar a Modal")
         }
     }
 }
