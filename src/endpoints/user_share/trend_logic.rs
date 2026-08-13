@@ -4,6 +4,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, 
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
+use tokio::task::JoinSet;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
@@ -116,14 +117,30 @@ pub async fn handler(
             .timeout(Duration::from_secs(90))
             .build()
             .expect("reqwest client");
+        let mut requests = JoinSet::new();
         for ticker in tickers {
-            let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
-            if trend.get("available").and_then(Value::as_bool) != Some(true) {
-                discover_ticker_for_training(&ticker);
-                prepare_models_in_background(&ticker);
-            }
-            trends.push(trend);
+            let client = client.clone();
+            let modal_lstm_url = modal_lstm_url.clone();
+            requests.spawn(async move {
+                let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
+                if trend.get("available").and_then(Value::as_bool) != Some(true) {
+                    discover_ticker_for_training(&ticker);
+                    prepare_models_in_background(&ticker);
+                }
+                trend
+            });
         }
+        while let Some(result) = requests.join_next().await {
+            match result {
+                Ok(trend) => trends.push(trend),
+                Err(error) => tracing::error!("Fallo una consulta de tendencia: {}", error),
+            }
+        }
+        trends.sort_by(|left, right| {
+            left.get("ticker")
+                .and_then(Value::as_str)
+                .cmp(&right.get("ticker").and_then(Value::as_str))
+        });
     }
 
     (StatusCode::OK, Json(json!({ "trends": trends })))
