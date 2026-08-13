@@ -919,6 +919,7 @@
           "available": {
             "type": "boolean"
           },
+          "backtest": {},
           "condition": {
             "type": [
               "string",
