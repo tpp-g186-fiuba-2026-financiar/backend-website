@@ -1,6 +1,7 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Extension, Json};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::time::Duration;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
@@ -36,14 +37,23 @@ pub async fn handler(
     let ticker = ticker.trim().to_uppercase();
     let base = std::env::var("DATA_COLLECTOR_URL")
         .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
-    let response = reqwest::Client::new()
-        .post(format!(
-            "{}/historical-data/{}",
-            base.trim_end_matches('/'),
-            ticker
-        ))
-        .send()
-        .await;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .expect("reqwest client");
+    let url = format!("{}/historical-data/{}", base.trim_end_matches('/'), ticker);
+    let mut response = client.post(&url).send().await;
+    for attempt in 2..=3 {
+        let retry = match &response {
+            Err(_) => true,
+            Ok(value) => value.status().is_server_error(),
+        };
+        if !retry {
+            break;
+        }
+        tracing::warn!("Reintentando histórico de {} (intento {})", ticker, attempt);
+        response = client.post(&url).send().await;
+    }
 
     match response {
         Ok(response) if response.status().is_success() => match response.json::<Value>().await {
