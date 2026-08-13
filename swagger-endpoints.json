@@ -512,7 +512,7 @@
         "operationId": "handler",
         "responses": {
           "200": {
-            "description": "Trend prediction (api-ml) for each stock declared by the authenticated user",
+            "description": "Trend prediction (Modal) for each stock declared by the authenticated user",
             "content": {
               "application/json": {
                 "schema": {
@@ -567,6 +567,48 @@
         ]
       }
     },
+    "/user/shares/{ticker}/history": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historico de cierres disponible en data-colector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "502": {
+            "description": "data-colector no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares/{ticker}/trends/compare": {
       "get": {
         "tags": [
@@ -586,44 +628,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Prediccion de tendencia de todos los modelos que api-ml corre en paralelo (lstm, xgboost, transformer, arima, y las variantes -modal si estan configuradas), lado a lado sobre el mismo historico",
+            "description": "Compara los modelos productivos de tendencia desplegados en Modal",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CompareTrendsResponse"
-                },
-                "example": {
-                  "as_of": "2026-07-28",
-                  "default_model": "lstm",
-                  "predictions": {
-                    "lstm": {
-                      "as_of": "2026-07-28",
-                      "available": true,
-                      "condition": "neutral",
-                      "horizon_days": 5,
-                      "last_close": 8365.0,
-                      "model": "lstm",
-                      "model_version": "lstm-20260618T003942Z",
-                      "predicted_close": 8511.82,
-                      "reason": null,
-                      "rsi": 58.3,
-                      "signal": "alza"
-                    },
-                    "transformer": {
-                      "as_of": null,
-                      "available": false,
-                      "condition": null,
-                      "horizon_days": null,
-                      "last_close": null,
-                      "model": null,
-                      "model_version": null,
-                      "predicted_close": null,
-                      "reason": "modelo no entrenado",
-                      "rsi": null,
-                      "signal": null
-                    }
-                  },
-                  "symbol": "GGAL"
                 }
               }
             }
@@ -631,11 +640,8 @@
           "401": {
             "description": "Missing or invalid authentication token"
           },
-          "500": {
-            "description": "Internal server error"
-          },
           "502": {
-            "description": "api-ml no pudo responder"
+            "description": "Ningun modelo de Modal pudo responder"
           }
         },
         "security": [
@@ -796,6 +802,23 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "HistoricalPricePoint": {
+        "type": "object",
+        "required": [
+          "ts",
+          "close"
+        ],
+        "properties": {
+          "close": {
+            "type": "number",
+            "format": "double"
+          },
+          "ts": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -999,6 +1022,24 @@
             "minimum": 0
           },
           "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ShareHistoryResponse": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "prices"
+        ],
+        "properties": {
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoricalPricePoint"
+            }
+          },
+          "ticker": {
             "type": "string"
           }
         }
