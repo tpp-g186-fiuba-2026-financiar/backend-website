@@ -1079,12 +1079,16 @@
         "type": "object",
         "required": [
           "id",
-          "ticker"
+          "ticker",
+          "predictable"
         ],
         "properties": {
           "id": {
             "type": "integer",
             "format": "int32"
+          },
+          "predictable": {
+            "type": "boolean"
           },
           "ticker": {
             "type": "string"
