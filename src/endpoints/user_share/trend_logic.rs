@@ -113,8 +113,11 @@ pub async fn handler(
     if !tickers.is_empty() {
         let modal_lstm_url = std::env::var("MODAL_LSTM_URL")
             .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-main.modal.run".into());
+        // El proxy de Render puede cortar la request antes que un cold start de
+        // Modal. Cortamos nosotros primero para responder 200 con cada ticker
+        // en estado "preparando" y no perder CORS con un 502 del proxy.
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(90))
+            .timeout(Duration::from_secs(20))
             .build()
             .expect("reqwest client");
         let mut requests = JoinSet::new();

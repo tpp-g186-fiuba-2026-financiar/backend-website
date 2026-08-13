@@ -53,7 +53,7 @@ pub async fn handler(
 ) -> impl IntoResponse {
     let ticker = ticker.trim().to_uppercase();
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(90))
+        .timeout(Duration::from_secs(20))
         .build()
         .expect("reqwest client");
     let lstm_url = std::env::var("MODAL_LSTM_URL").unwrap_or_else(|_| DEFAULT_LSTM_URL.into());
