@@ -97,6 +97,26 @@ pub async fn handler(
         );
     }
 
+    match crate::endpoints::share::model_catalog::ready_tickers().await {
+        Ok(ready) if ready.contains(&ticker) => {}
+        Ok(_) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "code": 422,
+                    "message": "Este ticker no tiene suficiente histórico para generar predicciones."
+                })),
+            );
+        }
+        Err(error) => {
+            tracing::error!("Failed to validate model-ready ticker: {}", error);
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "code": 503, "message": "No se pudo validar el ticker." })),
+            );
+        }
+    }
+
     let rows = sqlx::query_as::<_, (i32, String)>(
         r#"
         SELECT id, ticker

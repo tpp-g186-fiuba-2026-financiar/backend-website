@@ -43,9 +43,23 @@ async fn main() {
 
     // Adding CORS
     let allowed_origin = env::var("ALLOWED_ORIGIN").expect("ALLOWED_ORIGIN must be set");
-    println!("Allowed origin: {}", allowed_origin);
+    let mut allowed_origins = allowed_origin
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(|origin| {
+            origin
+                .parse::<HeaderValue>()
+                .expect("invalid ALLOWED_ORIGIN")
+        })
+        .collect::<Vec<_>>();
+    let production_frontend = HeaderValue::from_static("https://frontend-mfnd.onrender.com");
+    if !allowed_origins.contains(&production_frontend) {
+        allowed_origins.push(production_frontend);
+    }
+    println!("Allowed origins: {:?}", allowed_origins);
     let cors = CorsLayer::new()
-        .allow_origin(allowed_origin.parse::<HeaderValue>().unwrap())
+        .allow_origin(allowed_origins)
         .allow_methods([
             Method::GET,
             Method::POST,
