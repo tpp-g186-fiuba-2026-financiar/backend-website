@@ -138,18 +138,12 @@ pub fn app_with_state(
     let retro_routes = Router::new()
         .route("/retro", get(endpoints::retro::page::handler))
         .route(
-            
             "/retro/api/board",
-           
             get(endpoints::retro::board_logic::handler),
-        ,
         )
         .route(
-            
             "/retro/api/cards",
-           
             post(endpoints::retro::cards_logic::create),
-        ,
         )
         .route(
             "/retro/api/cards/{id}",
