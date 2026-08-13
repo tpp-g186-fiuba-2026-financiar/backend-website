@@ -1,4 +1,8 @@
-use std::time::Duration;
+use std::{
+    collections::HashSet,
+    sync::{LazyLock, Mutex},
+    time::Duration,
+};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension, Json};
 use serde::Serialize;
@@ -8,6 +12,10 @@ use tokio::task::JoinSet;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
+
+const MAX_CONCURRENT_PREPARATIONS: usize = 2;
+static PREPARING_TICKERS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 #[derive(Serialize, ToSchema)]
 pub struct ShareTrendItem {
@@ -126,9 +134,8 @@ pub async fn handler(
             let modal_lstm_url = modal_lstm_url.clone();
             requests.spawn(async move {
                 let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
-                if trend.get("available").and_then(Value::as_bool) != Some(true) {
+                if needs_preparation(&trend) && prepare_models_in_background(&ticker) {
                     discover_ticker_for_training(&ticker);
-                    prepare_models_in_background(&ticker);
                 }
                 trend
             });
@@ -151,8 +158,15 @@ pub async fn handler(
 
 /// Dispara el bootstrap en Modal sin hacer esperar al request del usuario.
 /// Los endpoints son idempotentes: si el artefacto ya existe no reentrenan.
-fn prepare_models_in_background(ticker: &str) {
+fn prepare_models_in_background(ticker: &str) -> bool {
     let ticker = ticker.to_owned();
+    {
+        let mut preparing = PREPARING_TICKERS.lock().expect("preparing tickers lock");
+        if preparing.contains(&ticker) || preparing.len() >= MAX_CONCURRENT_PREPARATIONS {
+            return false;
+        }
+        preparing.insert(ticker.clone());
+    }
     let lstm_url = std::env::var("MODAL_LSTM_PREPARE_URL")
         .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-prepare.modal.run".into());
     let xgboost_url = std::env::var("MODAL_XGBOOST_PREPARE_URL")
@@ -185,7 +199,12 @@ fn prepare_models_in_background(ticker: &str) {
                 }
             }
         }
+        PREPARING_TICKERS
+            .lock()
+            .expect("preparing tickers lock")
+            .remove(&ticker);
     });
+    true
 }
 
 /// Si un ticker de la cartera aun no tiene artefacto, pide su historico en
@@ -286,4 +305,13 @@ fn unavailable(ticker: &str, reason: &str) -> Value {
         "model_version": Value::Null,
         "reason": reason,
     })
+}
+
+/// Un timeout o una caida de Modal no significa que falte entrenar. Solo se
+/// inicia el bootstrap cuando el propio modelo confirma que no hay artefacto.
+fn needs_preparation(trend: &Value) -> bool {
+    trend
+        .get("reason")
+        .and_then(Value::as_str)
+        .is_some_and(|reason| reason.contains("todavia no hay un modelo entrenado"))
 }
