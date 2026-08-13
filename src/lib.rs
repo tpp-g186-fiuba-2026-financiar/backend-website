@@ -43,6 +43,8 @@ use crate::endpoints::user_share::put_logic::{
 use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
 };
+use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
+use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 
 pub struct SecurityAddon;
 
@@ -76,6 +78,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::trend_logic::handler,
         endpoints::user_share::compare_trend_logic::handler,
         endpoints::share::get_logic::handler,
+        endpoints::user_share::portfolio_logic::handler,
     ),
     components(
         schemas(
@@ -94,6 +97,7 @@ impl Modify for SecurityAddon {
             ShareTrendItem,
             CompareTrendsResponse,
             ModelPredictionItem,
+            PortfolioRecomendacionResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -170,6 +174,10 @@ pub fn app_with_state(
         .route(
             "/user/shares/{ticker}/trends/compare",
             get(user_share_compare_trend_logic::handler),
+        )
+        .route(
+            "/user/shares/portfolio/recomendacion", 
+            get(user_share_portfolio_logic::handler)
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
