@@ -504,6 +504,85 @@
         ]
       }
     },
+    "/user/shares/portfolio/recomendacion": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "description": "Modelo de prediccion de tendencia a usar (ver /models en api-ml para el default vigente)",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cartera_ancla",
+            "in": "path",
+            "description": "Estrategia de cartera ancla: propia | equal_weight | mercado",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pesos de cartera recomendados (Black-Litterman) para el usuario autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioRecomendacionResponse"
+                },
+                "example": {
+                  "pesos_recomendados": {
+                    "GGAL": 0.42,
+                    "PAMP": 0.27,
+                    "YPFD": 0.31
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El usuario no tiene perfil de riesgo configurado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Modelo de prediccion desconocido"
+          },
+          "422": {
+            "description": "No hay suficientes datos para calcular la recomendacion"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "501": {
+            "description": "Estrategia de cartera ancla solicitada todavia no implementada"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares/trends": {
       "get": {
         "tags": [
@@ -977,6 +1056,24 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "PortfolioRecomendacionResponse": {
+        "type": "object",
+        "required": [
+          "pesos_recomendados"
+        ],
+        "properties": {
+          "pesos_recomendados": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
