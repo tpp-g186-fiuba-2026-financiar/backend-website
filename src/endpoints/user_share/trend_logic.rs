@@ -117,11 +117,90 @@ pub async fn handler(
             .build()
             .expect("reqwest client");
         for ticker in tickers {
-            trends.push(fetch_trend(&client, &modal_lstm_url, &ticker).await);
+            let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
+            if trend.get("available").and_then(Value::as_bool) != Some(true) {
+                discover_ticker_for_training(&ticker);
+                prepare_models_in_background(&ticker);
+            }
+            trends.push(trend);
         }
     }
 
     (StatusCode::OK, Json(json!({ "trends": trends })))
+}
+
+/// Dispara el bootstrap en Modal sin hacer esperar al request del usuario.
+/// Los endpoints son idempotentes: si el artefacto ya existe no reentrenan.
+fn prepare_models_in_background(ticker: &str) {
+    let ticker = ticker.to_owned();
+    let lstm_url = std::env::var("MODAL_LSTM_PREPARE_URL")
+        .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-prepare.modal.run".into());
+    let xgboost_url = std::env::var("MODAL_XGBOOST_PREPARE_URL")
+        .unwrap_or_else(|_| "https://matimorales01--xgboost-trend-model-prepare.modal.run".into());
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(7200))
+            .build()
+            .expect("reqwest client");
+        let (lstm, xgboost) = tokio::join!(
+            client.get(&lstm_url).query(&[("ticker", &ticker)]).send(),
+            client
+                .get(&xgboost_url)
+                .query(&[("ticker", &ticker)])
+                .send(),
+        );
+        for (model, result) in [("lstm", lstm), ("xgboost", xgboost)] {
+            match result {
+                Ok(response) if response.status().is_success() => {
+                    tracing::info!("Bootstrap {} completado para {}", model, ticker);
+                }
+                Ok(response) => tracing::warn!(
+                    "Bootstrap {} fallo para {}: HTTP {}",
+                    model,
+                    ticker,
+                    response.status()
+                ),
+                Err(error) => {
+                    tracing::warn!("Bootstrap {} fallo para {}: {}", model, ticker, error)
+                }
+            }
+        }
+    });
+}
+
+/// Si un ticker de la cartera aun no tiene artefacto, pide su historico en
+/// background. data-colector lo incorpora al catalogo cuando tiene suficientes
+/// ruedas y los cron diarios de Modal lo entrenan sin listas hardcodeadas.
+fn discover_ticker_for_training(ticker: &str) {
+    let ticker = ticker.to_owned();
+    let collector = std::env::var("DATA_COLLECTOR_URL")
+        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+    tokio::spawn(async move {
+        let result = reqwest::Client::builder()
+            .timeout(Duration::from_secs(90))
+            .build()
+            .expect("reqwest client")
+            .post(format!(
+                "{}/historical-data/{}",
+                collector.trim_end_matches('/'),
+                ticker
+            ))
+            .send()
+            .await;
+        match result {
+            Ok(response) if response.status().is_success() => {
+                tracing::info!("Historico solicitado para descubrir ticker {}", ticker);
+            }
+            Ok(response) => tracing::warn!(
+                "No se pudo descubrir ticker {}: data-colector respondio {}",
+                ticker,
+                response.status()
+            ),
+            Err(error) => {
+                tracing::warn!("No se pudo descubrir ticker {}: {}", ticker, error);
+            }
+        }
+    });
 }
 
 /// Pide la tendencia de un ticker al LSTM productivo de Modal. Si falla (caido, timeout, ticker
