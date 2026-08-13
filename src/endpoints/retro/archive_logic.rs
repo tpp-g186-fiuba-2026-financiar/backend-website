@@ -168,19 +168,22 @@ pub async fn undo(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
     };
 
     for column in ["bien", "mejorar", "acciones", "preguntas"] {
-        let cards = snapshot.get(column).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        let cards = snapshot
+            .get(column)
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
         for card in cards {
             let content = card.get("content").and_then(|v| v.as_str()).unwrap_or("");
             if content.is_empty() {
                 continue;
             }
-            if let Err(err) = sqlx::query(
-                "INSERT INTO retro_cards (column_name, content) VALUES ($1, $2)",
-            )
-            .bind(column)
-            .bind(content)
-            .execute(&mut *tx)
-            .await
+            if let Err(err) =
+                sqlx::query("INSERT INTO retro_cards (column_name, content) VALUES ($1, $2)")
+                    .bind(column)
+                    .bind(content)
+                    .execute(&mut *tx)
+                    .await
             {
                 tracing::error!("Failed to restore retro card on undo: {}", err);
                 return server_error("No se pudo deshacer");

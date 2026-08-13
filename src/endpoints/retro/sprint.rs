@@ -1,10 +1,9 @@
 use sqlx::{PgPool, Postgres, Transaction};
 
 pub async fn current(pool: &PgPool) -> Result<i32, sqlx::Error> {
-    let (n,): (i32,) =
-        sqlx::query_as("SELECT current_sprint FROM retro_sprint WHERE id = 1")
-            .fetch_one(pool)
-            .await?;
+    let (n,): (i32,) = sqlx::query_as("SELECT current_sprint FROM retro_sprint WHERE id = 1")
+        .fetch_one(pool)
+        .await?;
     Ok(n)
 }
 

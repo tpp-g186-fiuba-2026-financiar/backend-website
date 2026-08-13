@@ -153,7 +153,10 @@ pub async fn handler(
             })
             .collect::<Vec<_>>(),
         Err(err) => {
-            tracing::error!("Failed to list tenencias for portfolio recomendacion: {}", err);
+            tracing::error!(
+                "Failed to list tenencias for portfolio recomendacion: {}",
+                err
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -210,7 +213,10 @@ pub async fn handler(
         Ok(res) if res.status().is_success() => match res.json::<Value>().await {
             Ok(body) => (StatusCode::OK, Json(body)),
             Err(err) => {
-                tracing::error!("Respuesta invalida de api-ml al recomendar cartera: {}", err);
+                tracing::error!(
+                    "Respuesta invalida de api-ml al recomendar cartera: {}",
+                    err
+                );
                 (
                     StatusCode::BAD_GATEWAY,
                     Json(json!({
@@ -232,10 +238,14 @@ pub async fn handler(
                 .and_then(|body| body.get("detail").and_then(Value::as_str).map(String::from))
                 .unwrap_or_else(|| "api-ml no pudo calcular la recomendacion".to_string());
 
-            tracing::warn!("api-ml respondio {} al recomendar cartera: {}", status, detail);
+            tracing::warn!(
+                "api-ml respondio {} al recomendar cartera: {}",
+                status,
+                detail
+            );
 
-            let axum_status = StatusCode::from_u16(status.as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let axum_status =
+                StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
             (
                 axum_status,
@@ -243,7 +253,10 @@ pub async fn handler(
             )
         }
         Err(err) => {
-            tracing::error!("No se pudo contactar a api-ml para recomendar cartera: {}", err);
+            tracing::error!(
+                "No se pudo contactar a api-ml para recomendar cartera: {}",
+                err
+            );
             (
                 StatusCode::BAD_GATEWAY,
                 Json(json!({

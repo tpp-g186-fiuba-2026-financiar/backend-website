@@ -34,6 +34,7 @@ use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
 use crate::endpoints::user_share::get_logic::{
     self as user_share_get_logic, ListSharesResponse, ShareItem,
 };
+use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
 use crate::endpoints::user_share::post_logic::{
     self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
 };
@@ -43,7 +44,6 @@ use crate::endpoints::user_share::put_logic::{
 use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
 };
-use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 
 pub struct SecurityAddon;
@@ -133,8 +133,14 @@ pub fn app_with_state(
     // no esta en `ApiDoc` (no aparece en /swagger).
     let retro_routes = Router::new()
         .route("/retro", get(endpoints::retro::page::handler))
-        .route("/retro/api/board", get(endpoints::retro::board_logic::handler))
-        .route("/retro/api/cards", post(endpoints::retro::cards_logic::create))
+        .route(
+            "/retro/api/board",
+            get(endpoints::retro::board_logic::handler),
+        )
+        .route(
+            "/retro/api/cards",
+            post(endpoints::retro::cards_logic::create),
+        )
         .route(
             "/retro/api/cards/{id}",
             axum::routing::delete(endpoints::retro::cards_logic::delete),
@@ -176,8 +182,8 @@ pub fn app_with_state(
             get(user_share_compare_trend_logic::handler),
         )
         .route(
-            "/user/shares/portfolio/recomendacion", 
-            get(user_share_portfolio_logic::handler)
+            "/user/shares/portfolio/recomendacion",
+            get(user_share_portfolio_logic::handler),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
