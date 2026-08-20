@@ -29,7 +29,7 @@ pub struct UpdateShareResponse {
 
 #[utoipa::path(
     put,
-    path = "/shares/{id}",
+    path = "/user/shares/{id}",
     params(
         ("id" = i32, Path, description = "ID of the share to update")
     ),

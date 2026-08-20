@@ -28,7 +28,7 @@ pub struct CreateShareResponse {
 
 #[utoipa::path(
     post,
-    path = "/shares",
+    path = "/user/shares",
     request_body = CreateShareRequest,
     responses(
         (status = 201, description = "Share added to the authenticated user's portfolio", body = CreateShareResponse, example = json!({

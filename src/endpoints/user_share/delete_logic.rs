@@ -11,7 +11,7 @@ use crate::auth::middleware::AuthUser;
 
 #[utoipa::path(
     delete,
-    path = "/shares/{id}",
+    path = "/user/shares/{id}",
     params(
         ("id" = i32, Path, description = "ID of the share to delete")
     ),

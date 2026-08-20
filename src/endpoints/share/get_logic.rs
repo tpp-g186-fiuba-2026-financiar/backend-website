@@ -18,7 +18,7 @@ pub struct ListAllSharesResponse {
 
 #[utoipa::path(
     get,
-    path = "/shares/all",
+    path = "/shares",
     responses(
         (status = 200, description = "List of all available share tickers", body = ListAllSharesResponse, example = json!({
             "shares": [

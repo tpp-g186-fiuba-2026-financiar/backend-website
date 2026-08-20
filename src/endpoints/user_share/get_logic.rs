@@ -23,7 +23,7 @@ pub struct ListSharesResponse {
 
 #[utoipa::path(
     get,
-    path = "/shares",
+    path = "/user/shares",
     responses(
         (status = 200, description = "List of shares declared by the authenticated user", body = ListSharesResponse, example = json!({
             "shares": [

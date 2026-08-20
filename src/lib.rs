@@ -72,6 +72,7 @@ impl Modify for SecurityAddon {
         endpoints::user::registration::registration_logic::handler,
         endpoints::user::login_logic::handler,
         endpoints::user::get_user_logic::handler,
+        endpoints::user::delete_logic::handler,
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
         endpoints::user_share::delete_logic::handler,
@@ -80,6 +81,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::compare_trend_logic::handler,
         endpoints::user_share::history_logic::handler,
         endpoints::share::get_logic::handler,
+        endpoints::share::update_logic::handler,
         endpoints::user_share::portfolio_logic::handler,
     ),
     components(

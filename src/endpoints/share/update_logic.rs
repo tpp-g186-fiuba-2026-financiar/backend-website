@@ -3,8 +3,8 @@ use serde_json::json;
 use sqlx::PgPool;
 
 #[utoipa::path(
-    post,
-    path = "/share/sync",
+    get,
+    path = "/shares/update",
     responses(
         (status = 200, description = "Tickers synced successfully", example = json!({
             "added": 3,
