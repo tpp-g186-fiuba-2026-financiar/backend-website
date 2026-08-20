@@ -67,14 +67,11 @@ jobs:
 
       - name: Organize files for deployment
         run: |
-          # Directorio para almacenar los archivos de documentación y cobertura
+          rm -rf public
           mkdir -p public/swagger public/coverage
 
-          # Elementos de json movemos a la carpeta swagger
           mv swagger-endpoints.json public/swagger/
-
-          # Elementos de cobertura movemos a la carpeta coverage
-          cp -r target/llvm-cov/html/* public/coverage/
+          cp -r target/llvm-cov/html/. public/coverage/
 
           touch public/.nojekyll
 
