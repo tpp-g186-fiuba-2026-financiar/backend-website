@@ -75,6 +75,12 @@ jobs:
 
           touch public/.nojekyll
 
+          # DEBUG: Print out directory tree to check if coverage/index.html actually exists
+          echo "=== PUBLIC FOLDER CONTENTS ==="
+          ls -la public/
+          echo "=== COVERAGE FOLDER CONTENTS ==="
+          ls -la public/coverage/
+
           # Creamos el landing
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
