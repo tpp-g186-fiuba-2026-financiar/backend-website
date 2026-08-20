@@ -76,6 +76,8 @@ jobs:
           # Elementos de cobertura movemos a la carpeta coverage
           cp -r target/llvm-cov/html/* public/coverage/
 
+          touch public/.nojekyll
+
           # Creamos el landing
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
@@ -114,11 +116,20 @@ jobs:
                       border-radius: 6px;
                       text-decoration: none;
                       font-weight: 600;
-                      transition: background-color 0.2s;
+                      transition: all 0.2s ease-in-out;
+                      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
                   }
-                  .btn:hover { background-color: #1d4ed8; }
+                  .btn:hover { 
+                      background-color: #1d4ed8; 
+                      transform: translateY(-2px);
+                      box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.3);
+                  }
                   .btn-secondary { background-color: #334155; }
-                  .btn-secondary:hover { background-color: #475569; }
+                  .btn-secondary:hover { 
+                      background-color: #475569; 
+                      transform: translateY(-2px);
+                      box-shadow: 0 6px 12px -2px rgba(51, 65, 85, 0.4);
+                  }
               </style>
           </head>
           <body>
@@ -163,7 +174,6 @@ jobs:
           </body>
           </html>
           EOF
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
