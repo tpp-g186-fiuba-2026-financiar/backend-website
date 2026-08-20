@@ -63,7 +63,7 @@ jobs:
       - name: Generate code coverage HTML report
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
-        run: cargo llvm-cov --html --output-dir target/llvm-cov/html
+        run: cargo llvm-cov --html --output-dir target/llvm-cov
 
       - name: Organize files for deployment
         run: |
@@ -72,7 +72,7 @@ jobs:
 
           mv swagger-endpoints.json public/swagger/
 
-          cp -r target/llvm-cov/html/. public/coverage/
+          cp -r target/llvm-cov/. public/coverage/
 
           touch public/.nojekyll
 
@@ -172,6 +172,7 @@ jobs:
           </body>
           </html>
           EOF
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
