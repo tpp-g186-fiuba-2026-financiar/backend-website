@@ -40,9 +40,30 @@ jobs:
         with:
           components: llvm-tools-preview
 
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+  
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+      - name: Run Database Migrations
+        run: cargo sqlx migrate run
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+
+      - name: Verify SQLx Cache (optional, matches ci.yml)
+        run: cargo sqlx prepare --workspace --check
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+
       - name: Generate swagger-endpoints.json
         run: |
           EXPORT_OPENAPI=1 cargo run
+
+      - name: Generate code coverage HTML report
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+        run: cargo llvm-cov --html --output-dir target/llvm-cov/html
 
       - name: Organize files for deployment
         run: |
