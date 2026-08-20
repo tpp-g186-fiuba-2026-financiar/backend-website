@@ -72,9 +72,21 @@ jobs:
 
           mv swagger-endpoints.json public/swagger/
 
-          cp -r target/llvm-cov/. public/coverage/
+          echo "=== SEARCHING FOR LLVM-COV OUTPUTS ==="
+          find target/llvm-cov -type f
+
+          COVERAGE_SRC=$(find target/llvm-cov -name "index.html" -exec dirname {} \; | head -n 1)
+          if [ -n "$COVERAGE_SRC" ]; then
+            echo "Found coverage index at: $COVERAGE_SRC"
+            cp -r "$COVERAGE_SRC"/. public/coverage/
+          else
+            echo "ERROR: Coverage index.html could not be found anywhere inside target/llvm-cov!"
+          fi
 
           touch public/.nojekyll
+
+          echo "=== FINAL public/coverage CONTENTS ==="
+          ls -la public/coverage/
 
           # Creamos el landing
           cat << 'EOF' > public/index.html
