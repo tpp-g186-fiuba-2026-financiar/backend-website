@@ -51,7 +51,7 @@ jobs:
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
 
-      - name: Verify SQLx Cache (optional, matches ci.yml)
+      - name: Verify SQLx Cache
         run: cargo sqlx prepare --workspace --check
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
@@ -71,15 +71,10 @@ jobs:
           mkdir -p public/swagger public/coverage
 
           mv swagger-endpoints.json public/swagger/
+
           cp -r target/llvm-cov/html/. public/coverage/
 
           touch public/.nojekyll
-
-          # DEBUG: Print out directory tree to check if coverage/index.html actually exists
-          echo "=== PUBLIC FOLDER CONTENTS ==="
-          ls -la public/
-          echo "=== COVERAGE FOLDER CONTENTS ==="
-          ls -la public/coverage/
 
           # Creamos el landing
           cat << 'EOF' > public/index.html
