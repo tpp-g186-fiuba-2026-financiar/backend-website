@@ -4,7 +4,10 @@ on:
   push:
     branches:
       - main
-      - feat/register_swagger
+      - feat/**
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
