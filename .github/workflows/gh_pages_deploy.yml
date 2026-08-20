@@ -40,31 +40,22 @@ jobs:
         with:
           components: llvm-tools-preview
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Generate swagger-endpoints.json
         run: |
           EXPORT_OPENAPI=1 cargo run
 
-      - name: Generate code coverage HTML report
-        env:
-          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
-        run: |
-          cargo llvm-cov --html --output-dir target/llvm-cov/html
-
       - name: Organize files for deployment
         run: |
-          # Create directory structure inside public/
+          # Directorio para almacenar los archivos de documentación y cobertura
           mkdir -p public/swagger public/coverage
 
-          # Move Swagger JSON into the swagger folder
+          # Elementos de json movemos a la carpeta swagger
           mv swagger-endpoints.json public/swagger/
 
-          # Copy coverage files into the coverage folder
+          # Elementos de cobertura movemos a la carpeta coverage
           cp -r target/llvm-cov/html/* public/coverage/
 
-          # Create the main portal landing page
+          # Creamos el landing
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
           <html lang="en">
@@ -122,7 +113,7 @@ jobs:
           </html>
           EOF
 
-          # Create Swagger UI index.html inside the swagger folder
+          # Creamos el Swagger UI 
           cat << 'EOF' > public/swagger/index.html
           <!DOCTYPE html>
           <html lang="en">

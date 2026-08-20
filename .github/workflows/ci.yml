@@ -63,3 +63,8 @@ jobs:
         run: cargo sqlx prepare --workspace --check
         env:
           DATABASE_URL: postgres://postgres:password@localhost:5432/test_db
+
+      - name: Generate code coverage HTML report
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+        run: cargo llvm-cov --html --output-dir target/llvm-cov/html
