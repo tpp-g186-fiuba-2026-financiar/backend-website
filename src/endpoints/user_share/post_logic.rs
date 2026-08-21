@@ -128,7 +128,7 @@ pub async fn handler(
     .fetch_one(&pool)
     .await;
 
-    let row = match rows {
+    let (share_id, ticker) = match rows {
         Ok(row) => row,
         Err(_) => {
             return (
@@ -137,7 +137,6 @@ pub async fn handler(
             );
         }
     };
-    let share_id = row.0;
 
     let insert_result = sqlx::query_as::<_, (i32, i32, i32, i32, DateTime<Utc>)>(
         r#"
@@ -152,12 +151,12 @@ pub async fn handler(
     .fetch_one(&pool)
     .await;
     match insert_result {
-        Ok((id, user_id, share_id, quantity, created_at)) => (
+        Ok((id, user_id, _share_id, quantity, created_at)) => (
             StatusCode::CREATED,
             Json(json!({
                 "id": id,
                 "user_id": user_id,
-                "share_id": share_id,
+                "ticker": ticker,
                 "quantity": quantity,
                 "created_at": created_at,
             })),
