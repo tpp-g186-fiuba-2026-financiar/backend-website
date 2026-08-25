@@ -13,6 +13,7 @@ pub struct ShareItem {
     pub user_id: i32,
     pub ticker: String,
     pub quantity: i32,
+    pub entry_price: Option<f64>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -32,6 +33,7 @@ pub struct ListSharesResponse {
                     "user_id": 42,
                     "ticker": "GGAL",
                     "quantity": 10,
+                    "entry_price": 1520.50,
                     "created_at": "2026-05-28T12:00:00Z"
                 }
             ]
@@ -52,9 +54,9 @@ pub async fn handler(
     State(pool): State<PgPool>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let rows = sqlx::query_as::<_, (i32, i32, String, i32, DateTime<Utc>)>(
+    let rows = sqlx::query_as::<_, (i32, i32, String, i32, Option<f64>, DateTime<Utc>)>(
         r#"
-        SELECT us.id, us.user_id, s.ticker, us.quantity, us.created_at
+        SELECT us.id, us.user_id, s.ticker, us.quantity, us.entry_price, us.created_at
         FROM user_shares us
         JOIN shares s ON s.id = us.share_id
         WHERE us.user_id = $1
@@ -69,12 +71,13 @@ pub async fn handler(
         Ok(rows) => {
             let shares: Vec<_> = rows
                 .into_iter()
-                .map(|(id, user_id, ticker, quantity, created_at)| {
+                .map(|(id, user_id, ticker, quantity, entry_price, created_at)| {
                     json!({
                         "id": id,
                         "user_id": user_id,
                         "ticker": ticker,
                         "quantity": quantity,
+                        "entry_price": entry_price,
                         "created_at": created_at,
                     })
                 })

@@ -15,6 +15,10 @@ pub struct CreateShareRequest {
     pub ticker: String,
     #[schema(example = 10)]
     pub quantity: i32,
+    /// Precio de entrada (precio pagado por accion). Opcional.
+    #[serde(default)]
+    #[schema(example = 1520.50)]
+    pub entry_price: Option<f64>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -23,6 +27,7 @@ pub struct CreateShareResponse {
     pub user_id: i32,
     pub ticker: String,
     pub quantity: i32,
+    pub entry_price: Option<f64>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -36,6 +41,7 @@ pub struct CreateShareResponse {
             "user_id": 42,
             "ticker": "GGAL",
             "quantity": 10,
+            "entry_price": 1520.50,
             "created_at": "2026-05-28T12:00:00Z"
         })),
         (status = 400, description = "Invalid input data", examples(
@@ -51,6 +57,13 @@ pub struct CreateShareResponse {
                 value = json!({
                     "code": 400,
                     "message": "Quantity must be a positive integer."
+                })
+            )),
+            ("Invalid Entry Price" = (
+                summary = "Triggered when entry_price is present but zero or negative",
+                value = json!({
+                    "code": 400,
+                    "message": "Entry price must be a positive number."
                 })
             ))
         )),
@@ -97,6 +110,16 @@ pub async fn handler(
         );
     }
 
+    if payload.entry_price.is_some_and(|price| price <= 0.0) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "code": 400,
+                "message": "Entry price must be a positive number."
+            })),
+        );
+    }
+
     match crate::endpoints::share::model_catalog::ready_tickers().await {
         Ok(ready) if ready.contains(&ticker) => {}
         Ok(_) => {
@@ -138,26 +161,28 @@ pub async fn handler(
         }
     };
 
-    let insert_result = sqlx::query_as::<_, (i32, i32, i32, i32, DateTime<Utc>)>(
+    let insert_result = sqlx::query_as::<_, (i32, i32, i32, i32, Option<f64>, DateTime<Utc>)>(
         r#"
-        INSERT INTO user_shares (user_id, share_id, quantity)
-        VALUES ($1, $2, $3)
-        RETURNING id, user_id, share_id, quantity, created_at
+        INSERT INTO user_shares (user_id, share_id, quantity, entry_price)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, user_id, share_id, quantity, entry_price, created_at
         "#,
     )
     .bind(auth_user.user_id)
     .bind(share_id)
     .bind(payload.quantity)
+    .bind(payload.entry_price)
     .fetch_one(&pool)
     .await;
     match insert_result {
-        Ok((id, user_id, _share_id, quantity, created_at)) => (
+        Ok((id, user_id, _share_id, quantity, entry_price, created_at)) => (
             StatusCode::CREATED,
             Json(json!({
                 "id": id,
                 "user_id": user_id,
                 "ticker": ticker,
                 "quantity": quantity,
+                "entry_price": entry_price,
                 "created_at": created_at,
             })),
         ),

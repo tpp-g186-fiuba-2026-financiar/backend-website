@@ -251,6 +251,102 @@ async fn put_share_with_negative_quantity_returns_400() {
 }
 
 #[tokio::test]
+async fn put_share_with_entry_price_returns_200_and_updates_it() {
+    let state = setup().await;
+    let email = unique_email("entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    let share_id = create_share(
+        &state.pool,
+        build_app(state.clone()).await,
+        &token,
+        "GGAL",
+        10,
+    )
+    .await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = put_share(
+        app,
+        &token,
+        share_id,
+        json!({ "quantity": 10, "entry_price": 1800.25 }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["entry_price"], 1800.25);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn put_share_without_entry_price_preserves_previous_value() {
+    let state = setup().await;
+    let email = unique_email("preserve_entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "GGAL").await;
+
+    let app = build_app(state.clone()).await;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/user/shares")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(
+                    json!({ "ticker": "GGAL", "quantity": 10, "entry_price": 999.99 }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let created: Value = serde_json::from_slice(&body).unwrap();
+    let share_id = created["id"].as_i64().unwrap() as i32;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = put_share(app, &token, share_id, json!({ "quantity": 50 })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["entry_price"], 999.99);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn put_share_with_zero_entry_price_returns_400() {
+    let state = setup().await;
+    let email = unique_email("zero_entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    let share_id = create_share(
+        &state.pool,
+        build_app(state.clone()).await,
+        &token,
+        "GGAL",
+        10,
+    )
+    .await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = put_share(
+        app,
+        &token,
+        share_id,
+        json!({ "quantity": 10, "entry_price": 0 }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["code"], 400);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
 async fn put_share_with_nonexistent_id_returns_404() {
     let state = setup().await;
     let email = unique_email("missing");

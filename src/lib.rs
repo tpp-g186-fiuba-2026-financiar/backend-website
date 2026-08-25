@@ -35,6 +35,9 @@ use crate::endpoints::user_share::get_logic::{
     self as user_share_get_logic, ListSharesResponse, ShareItem,
 };
 use crate::endpoints::user_share::history_logic::{HistoricalPricePoint, ShareHistoryResponse};
+use crate::endpoints::user_share::pnl_logic::{
+    self as user_share_pnl_logic, PnlResponse, PortfolioPnlSummary, SharePnlItem,
+};
 use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
 use crate::endpoints::user_share::post_logic::{
     self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
@@ -80,6 +83,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::trend_logic::handler,
         endpoints::user_share::compare_trend_logic::handler,
         endpoints::user_share::history_logic::handler,
+        endpoints::user_share::pnl_logic::handler,
         endpoints::share::get_logic::handler,
         endpoints::share::update_logic::handler,
         endpoints::user_share::portfolio_logic::handler,
@@ -104,6 +108,9 @@ impl Modify for SecurityAddon {
             ShareHistoryResponse,
             HistoricalPricePoint,
             PortfolioRecomendacionResponse,
+            PnlResponse,
+            SharePnlItem,
+            PortfolioPnlSummary,
         )
     ),
     modifiers(&SecurityAddon),
@@ -195,6 +202,7 @@ pub fn app_with_state(
             "/user/shares/portfolio/recomendacion",
             get(user_share_portfolio_logic::handler),
         )
+        .route("/user/shares/pnl", get(user_share_pnl_logic::handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body

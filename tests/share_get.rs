@@ -128,6 +128,33 @@ async fn create_share(pool: &sqlx::PgPool, app: Router, token: &str, ticker: &st
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
+async fn create_share_with_entry_price(
+    pool: &sqlx::PgPool,
+    app: Router,
+    token: &str,
+    ticker: &str,
+    quantity: i32,
+    entry_price: f64,
+) {
+    seed_catalog_ticker(pool, ticker).await;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/user/shares")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(
+                    json!({ "ticker": ticker, "quantity": quantity, "entry_price": entry_price })
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
 #[tokio::test]
 async fn get_shares_without_token_returns_401() {
     let state = setup().await;
@@ -229,6 +256,56 @@ async fn get_shares_returns_only_authenticated_user_shares() {
     assert!(tickers.contains(&"GGAL"));
     assert!(tickers.contains(&"YPFD"));
     assert!(tickers.contains(&"PAMP"));
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn get_shares_includes_entry_price() {
+    let state = setup().await;
+    let email = unique_email("entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    create_share_with_entry_price(
+        &state.pool,
+        build_app(state.clone()).await,
+        &token,
+        "GGAL",
+        10,
+        1520.50,
+    )
+    .await;
+    create_share(
+        &state.pool,
+        build_app(state.clone()).await,
+        &token,
+        "YPFD",
+        5,
+    )
+    .await;
+
+    let app = build_app(state.clone()).await;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/user/shares")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let shares = json["shares"].as_array().unwrap();
+
+    let ggal = shares.iter().find(|s| s["ticker"] == "GGAL").unwrap();
+    assert_eq!(ggal["entry_price"], 1520.50);
+
+    let ypfd = shares.iter().find(|s| s["ticker"] == "YPFD").unwrap();
+    assert!(ypfd["entry_price"].is_null());
 
     cleanup_user(&state.pool, &email).await;
 }

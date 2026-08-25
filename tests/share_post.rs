@@ -248,6 +248,83 @@ async fn post_share_with_unready_ticker_returns_422() {
 }
 
 #[tokio::test]
+async fn post_share_with_entry_price_returns_201_and_stores_it() {
+    let state = setup().await;
+    let email = unique_email("entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "GGAL").await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = post_share(
+        app,
+        &token,
+        json!({ "ticker": "GGAL", "quantity": 5, "entry_price": 1520.50 }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["entry_price"], 1520.50);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn post_share_without_entry_price_returns_null() {
+    let state = setup().await;
+    let email = unique_email("no_entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "GGAL").await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = post_share(app, &token, json!({ "ticker": "GGAL", "quantity": 5 })).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(json["entry_price"].is_null());
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn post_share_with_zero_entry_price_returns_400() {
+    let state = setup().await;
+    let email = unique_email("zero_entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = post_share(
+        app,
+        &token,
+        json!({ "ticker": "GGAL", "quantity": 5, "entry_price": 0 }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["code"], 400);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn post_share_with_negative_entry_price_returns_400() {
+    let state = setup().await;
+    let email = unique_email("neg_entry_price");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = post_share(
+        app,
+        &token,
+        json!({ "ticker": "GGAL", "quantity": 5, "entry_price": -10.0 }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["code"], 400);
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
 async fn post_share_duplicate_ticker_for_same_user_returns_409() {
     let state = setup().await;
     let email = unique_email("dup");
