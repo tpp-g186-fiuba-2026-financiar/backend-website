@@ -1419,7 +1419,8 @@
         "type": "object",
         "required": [
           "ticker",
-          "available"
+          "available",
+          "retryable"
         ],
         "properties": {
           "as_of": {
@@ -1475,6 +1476,9 @@
               "string",
               "null"
             ]
+          },
+          "retryable": {
+            "type": "boolean"
           },
           "rsi": {
             "type": [
