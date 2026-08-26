@@ -117,20 +117,32 @@ async fn fetch_api_ml_local_models(
         Ok(response) if response.status().is_success() => match response.json::<Value>().await {
             Ok(body) => Some(body),
             Err(error) => {
-                tracing::error!("Respuesta invalida de api-ml al comparar tendencias: {}", error);
+                tracing::error!(
+                    "Respuesta invalida de api-ml al comparar tendencias: {}",
+                    error
+                );
                 None
             }
         },
         Ok(response) => {
-            tracing::warn!("api-ml respondio {} al comparar tendencias", response.status());
+            tracing::warn!(
+                "api-ml respondio {} al comparar tendencias",
+                response.status()
+            );
             None
         }
         Err(error) => {
-            tracing::error!("No se pudo contactar a api-ml para comparar tendencias: {}", error);
+            tracing::error!(
+                "No se pudo contactar a api-ml para comparar tendencias: {}",
+                error
+            );
             None
         }
     };
-    let predictions = body.as_ref().and_then(|b| b.get("predictions")).and_then(Value::as_object);
+    let predictions = body
+        .as_ref()
+        .and_then(|b| b.get("predictions"))
+        .and_then(Value::as_object);
     LOCAL_MODEL_KEYS
         .into_iter()
         .map(|key| {
