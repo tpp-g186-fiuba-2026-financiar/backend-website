@@ -60,11 +60,13 @@ pub async fn handler(
     let xgboost_url =
         std::env::var("MODAL_XGBOOST_URL").unwrap_or_else(|_| DEFAULT_XGBOOST_URL.into());
     let arima_url = std::env::var("MODAL_ARIMA_URL").unwrap_or_else(|_| DEFAULT_ARIMA_URL.into());
+    let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, arima) = tokio::join!(
+    let (lstm, xgboost, arima, api_ml_models) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
         fetch_arima(&client, &arima_url, &ticker),
+        fetch_api_ml_local_models(&client, api_ml_url.as_deref(), &ticker),
     );
 
     let as_of = lstm
@@ -72,19 +74,79 @@ pub async fn handler(
         .or_else(|| xgboost.get("as_of"))
         .cloned()
         .unwrap_or(Value::Null);
+    let mut predictions = serde_json::Map::new();
+    predictions.insert("lstm-modal".into(), lstm);
+    predictions.insert("xgboost-modal".into(), xgboost);
+    predictions.insert("arima-modal".into(), arima);
+    for (key, value) in api_ml_models {
+        predictions.insert(key, value);
+    }
     (
         StatusCode::OK,
         Json(json!({
             "symbol": ticker,
             "as_of": as_of,
             "default_model": "lstm-modal",
-            "predictions": {
-                "lstm-modal": lstm,
-                "xgboost-modal": xgboost,
-                "arima-modal": arima
-            }
+            "predictions": predictions
         })),
     )
+}
+
+/// Modelos locales de `api-ml` (lstm/xgboost/transformer/arima): un modelo
+/// pooleado sobre todo el panel (a diferencia de los `-modal`, que son
+/// per-ticker), con backtest walk-forward propio. Se muestran como
+/// alternativa junto a los de Modal, no en reemplazo.
+async fn fetch_api_ml_local_models(
+    client: &reqwest::Client,
+    api_ml_url: Option<&str>,
+    ticker: &str,
+) -> HashMap<String, Value> {
+    const LOCAL_MODEL_KEYS: [&str; 4] = ["lstm", "xgboost", "transformer", "arima"];
+    let Some(api_ml_url) = api_ml_url else {
+        return LOCAL_MODEL_KEYS
+            .into_iter()
+            .map(|key| (key.to_string(), unavailable("api-ml no esta configurado")))
+            .collect();
+    };
+    let url = format!(
+        "{}/predict/trend/compare/{}",
+        api_ml_url.trim_end_matches('/'),
+        ticker
+    );
+    let body = match client.get(&url).send().await {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(body) => Some(body),
+            Err(error) => {
+                tracing::error!("Respuesta invalida de api-ml al comparar tendencias: {}", error);
+                None
+            }
+        },
+        Ok(response) => {
+            tracing::warn!("api-ml respondio {} al comparar tendencias", response.status());
+            None
+        }
+        Err(error) => {
+            tracing::error!("No se pudo contactar a api-ml para comparar tendencias: {}", error);
+            None
+        }
+    };
+    let predictions = body.as_ref().and_then(|b| b.get("predictions")).and_then(Value::as_object);
+    LOCAL_MODEL_KEYS
+        .into_iter()
+        .map(|key| {
+            let value = match predictions.and_then(|map| map.get(key)).cloned() {
+                Some(mut entry) if entry.get("reason").is_none() => {
+                    if let Some(object) = entry.as_object_mut() {
+                        object.entry("available").or_insert(Value::Bool(true));
+                    }
+                    entry
+                }
+                Some(entry) => entry,
+                None => unavailable("No se pudo contactar a api-ml"),
+            };
+            (key.to_string(), value)
+        })
+        .collect()
 }
 
 async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
