@@ -67,14 +67,6 @@ pub async fn handler(
         fetch_arima(&client, &arima_url, &ticker),
     );
 
-    if !is_available(&lstm) && !is_available(&xgboost) && !is_available(&arima) {
-        tracing::error!("Ningun modelo Modal pudo comparar {}", ticker);
-        return (
-            StatusCode::BAD_GATEWAY,
-            Json(json!({"code": 502, "message": "Los modelos de Modal no pudieron responder"})),
-        );
-    }
-
     let as_of = lstm
         .get("as_of")
         .or_else(|| xgboost.get("as_of"))
@@ -127,12 +119,12 @@ async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value
                         json!({
                             "available": true,
                             "signal": signal,
-                            "condition": null,
-                            "rsi": null,
+                            "condition": body.get("condition"),
+                            "rsi": body.get("rsi"),
                             "horizon_days": 5,
                             "last_close": last,
                             "predicted_close": predicted,
-                            "as_of": null,
+                            "as_of": body.get("as_of"),
                             "model": "arima-modal",
                             "model_version": body.get("model_version"),
                             "backtest": body.get("backtest"),
@@ -149,6 +141,9 @@ async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value
             ),
             Err(error) => unavailable(&format!("Respuesta invalida de ARIMA: {error}")),
         },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable("Servicio de predicciones no disponible")
+        }
         Ok(response) => unavailable(&format!("ARIMA respondio HTTP {}", response.status())),
         Err(error) => unavailable(&format!("No se pudo contactar a ARIMA: {error}")),
     }
@@ -177,6 +172,9 @@ async fn fetch_modal(client: &reqwest::Client, name: &str, url: &str, ticker: &s
             ),
             Err(error) => unavailable(&format!("Respuesta invalida de Modal: {error}")),
         },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable("Servicio de predicciones no disponible")
+        }
         Ok(response) => unavailable(&format!("Modal respondio HTTP {}", response.status())),
         Err(error) => unavailable(&format!("No se pudo contactar a Modal: {error}")),
     }
@@ -197,8 +195,4 @@ fn unavailable(reason: &str) -> Value {
         "backtest": null,
         "reason": reason
     })
-}
-
-fn is_available(value: &Value) -> bool {
-    value.get("available").and_then(Value::as_bool) == Some(true)
 }

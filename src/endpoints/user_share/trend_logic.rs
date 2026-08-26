@@ -31,6 +31,7 @@ pub struct ShareTrendItem {
     pub model: Option<String>,
     pub model_version: Option<String>,
     pub reason: Option<String>,
+    pub retryable: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -119,33 +120,88 @@ pub async fn handler(
 
     let mut trends = Vec::with_capacity(tickers.len());
     if !tickers.is_empty() {
-        let modal_lstm_url = std::env::var("MODAL_LSTM_URL")
-            .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-main.modal.run".into());
-        // El proxy de Render puede cortar la request antes que un cold start de
-        // Modal. Cortamos nosotros primero para responder 200 con cada ticker
-        // en estado "preparando" y no perder CORS con un 502 del proxy.
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .build()
-            .expect("reqwest client");
-        let mut requests = JoinSet::new();
-        for ticker in tickers {
-            let client = client.clone();
-            let modal_lstm_url = modal_lstm_url.clone();
-            requests.spawn(async move {
-                let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
-                if needs_preparation(&trend) && prepare_models_in_background(&ticker) {
-                    discover_ticker_for_training(&ticker);
-                }
-                trend
+        // Las predicciones solo cambian una vez por rueda (as_of es diario): servir
+        // desde cache lo pedido hoy evita pegarle a Modal en vivo en cada carga de
+        // pantalla, que es lo que hacia notablemente lento el listado (issue #180).
+        let cached: Vec<(String, Value)> = sqlx::query_as::<_, (String, Value)>(
+            r#"
+            SELECT ticker, payload
+            FROM ticker_trend_cache
+            WHERE ticker = ANY($1) AND fetched_at::date = CURRENT_DATE
+            "#,
+        )
+        .bind(&tickers)
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::error!("No se pudo leer la cache de tendencias: {}", error);
+            Vec::new()
+        });
+        let cached_tickers: HashSet<String> =
+            cached.iter().map(|(ticker, _)| ticker.clone()).collect();
+        trends.extend(cached.into_iter().map(|(_, payload)| payload));
+
+        let to_fetch: Vec<String> = tickers
+            .into_iter()
+            .filter(|ticker| !cached_tickers.contains(ticker))
+            .collect();
+
+        if !to_fetch.is_empty() {
+            let modal_lstm_url = std::env::var("MODAL_LSTM_URL").unwrap_or_else(|_| {
+                "https://matimorales01--lstm-trend-model-main.modal.run".into()
             });
-        }
-        while let Some(result) = requests.join_next().await {
-            match result {
-                Ok(trend) => trends.push(trend),
-                Err(error) => tracing::error!("Fallo una consulta de tendencia: {}", error),
+            // El proxy de Render puede cortar la request antes que un cold start de
+            // Modal. Cortamos nosotros primero para responder 200 con cada ticker
+            // en estado "preparando" y no perder CORS con un 502 del proxy.
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(20))
+                .build()
+                .expect("reqwest client");
+            let mut requests = JoinSet::new();
+            for ticker in to_fetch {
+                let client = client.clone();
+                let modal_lstm_url = modal_lstm_url.clone();
+                requests.spawn(async move {
+                    let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
+                    if needs_preparation(&trend) && prepare_models_in_background(&ticker) {
+                        discover_ticker_for_training(&ticker);
+                    }
+                    trend
+                });
+            }
+            while let Some(result) = requests.join_next().await {
+                match result {
+                    Ok(trend) => {
+                        if trend.get("available").and_then(Value::as_bool) == Some(true) {
+                            if let Some(ticker) = trend.get("ticker").and_then(Value::as_str) {
+                                if let Err(error) = sqlx::query(
+                                    r#"
+                                    INSERT INTO ticker_trend_cache (ticker, payload, fetched_at)
+                                    VALUES ($1, $2, now())
+                                    ON CONFLICT (ticker)
+                                    DO UPDATE SET payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at
+                                    "#,
+                                )
+                                .bind(ticker)
+                                .bind(&trend)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::error!(
+                                        "No se pudo guardar la cache de tendencia para {}: {}",
+                                        ticker,
+                                        error
+                                    );
+                                }
+                            }
+                        }
+                        trends.push(trend);
+                    }
+                    Err(error) => tracing::error!("Fallo una consulta de tendencia: {}", error),
+                }
             }
         }
+
         trends.sort_by(|left, right| {
             left.get("ticker")
                 .and_then(Value::as_str)
@@ -273,24 +329,29 @@ async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticker: &str) ->
                 body.get("error")
                     .and_then(Value::as_str)
                     .unwrap_or("Modal devolvio una respuesta invalida"),
+                false,
             ),
             Err(err) => {
                 tracing::error!("Respuesta invalida de Modal para {}: {}", ticker, err);
-                unavailable(ticker, "Respuesta invalida de Modal")
+                unavailable(ticker, "Respuesta invalida de Modal", true)
             }
         },
         Ok(res) => {
             tracing::warn!("Modal respondio {} para {}", res.status(), ticker);
-            unavailable(ticker, "Modal no pudo predecir para este ticker")
+            if res.status() == StatusCode::NOT_FOUND {
+                unavailable(ticker, "Servicio de predicciones no disponible", false)
+            } else {
+                unavailable(ticker, "Modal no pudo predecir para este ticker", true)
+            }
         }
         Err(err) => {
             tracing::error!("No se pudo contactar a Modal para {}: {}", ticker, err);
-            unavailable(ticker, "No se pudo contactar a Modal")
+            unavailable(ticker, "No se pudo contactar a Modal", true)
         }
     }
 }
 
-fn unavailable(ticker: &str, reason: &str) -> Value {
+fn unavailable(ticker: &str, reason: &str, retryable: bool) -> Value {
     json!({
         "ticker": ticker,
         "available": false,
@@ -304,6 +365,7 @@ fn unavailable(ticker: &str, reason: &str) -> Value {
         "model": Value::Null,
         "model_version": Value::Null,
         "reason": reason,
+        "retryable": retryable,
     })
 }
 
