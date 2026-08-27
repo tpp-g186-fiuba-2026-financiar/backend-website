@@ -84,7 +84,10 @@ async fn register_with_invalid_email_returns_400() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["code"], 400);
-    assert_eq!(json["message"], "Invalid e-mail");
+    // Nota: el utoipa::path del handler documenta "Invalid e-mail" como
+    // mensaje de ejemplo, pero el EmailValidator real devuelve este otro
+    // texto. Validamos el comportamiento real, no la doc (que está desactualizada).
+    assert_eq!(json["message"], "Invalid email format");
 }
 
 #[tokio::test]
@@ -355,12 +358,7 @@ async fn register_persists_full_name_and_risk_profile() {
         )
         .await
         .unwrap();
-    let body = user_response
-        .into_body()
-        .collect()
-        .await
-        .unwrap()
-        .to_bytes();
+    let body = user_response.into_body().collect().await.unwrap().to_bytes();
     let user: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(user["full_name"], "Persisted Name");
     assert_eq!(user["risk_profile"], "aggressive");
