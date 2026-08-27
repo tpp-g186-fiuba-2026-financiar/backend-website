@@ -358,7 +358,12 @@ async fn register_persists_full_name_and_risk_profile() {
         )
         .await
         .unwrap();
-    let body = user_response.into_body().collect().await.unwrap().to_bytes();
+    let body = user_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let user: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(user["full_name"], "Persisted Name");
     assert_eq!(user["risk_profile"], "aggressive");
