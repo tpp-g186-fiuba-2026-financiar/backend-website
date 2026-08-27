@@ -5,7 +5,7 @@ pub mod endpoints;
 
 use axum::{
     middleware,
-    routing::{get, post, put},
+    routing::{get, patch, post, put},
     Router,
 };
 use sqlx::PgPool;
@@ -16,7 +16,6 @@ use utoipa::{
     Modify, OpenApi,
 };
 
-use crate::auth::jwt::JwtConfig;
 use crate::auth::middleware::require_auth;
 use crate::configuration::config::AppState;
 use crate::endpoints::share::get_logic as share_get_logic;
@@ -49,6 +48,7 @@ use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
 };
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
+use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 
 pub struct SecurityAddon;
 
@@ -180,6 +180,10 @@ pub fn app_with_state(
         .route(
             "/user",
             get(get_user_logic::handler).delete(user_delete_logic::handler),
+        )
+        .route(
+            "/user/risk-profile",
+            patch(update_risk_profile_logic::handler),
         )
         .route(
             "/user/shares",
