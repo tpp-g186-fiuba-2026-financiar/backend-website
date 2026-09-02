@@ -1,3 +1,4 @@
+pub mod alert_subscription;
 pub mod health;
 pub mod hello;
 pub mod retro;
