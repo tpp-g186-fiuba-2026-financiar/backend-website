@@ -23,6 +23,7 @@ time = "0.3"
 jsonwebtoken    = "9"
 chrono          = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "native-tls"] }
+lettre = { version = "0.11", default-features = false, features = ["tokio1-native-tls", "smtp-transport", "builder"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] } 

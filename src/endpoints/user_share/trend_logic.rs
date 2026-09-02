@@ -301,7 +301,7 @@ fn discover_ticker_for_training(ticker: &str) {
 /// Pide la tendencia de un ticker al LSTM productivo de Modal. Si falla (caido, timeout, ticker
 /// sin modelo entrenado, etc.) no corta el resto: devuelve un item marcado
 /// como no disponible en vez de tirar 500 para todos los demas tickers.
-async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticker: &str) -> Value {
+pub(crate) async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticker: &str) -> Value {
     let response = client
         .get(modal_url)
         .query(&[("ticker", ticker), ("horizon", "5")])

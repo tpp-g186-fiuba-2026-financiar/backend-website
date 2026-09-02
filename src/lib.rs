@@ -1,7 +1,9 @@
+pub mod alerts;
 pub mod auth;
 pub mod configuration;
 pub mod database;
 pub mod endpoints;
+pub mod mail;
 
 use axum::{
     middleware,
@@ -18,6 +20,13 @@ use utoipa::{
 
 use crate::auth::middleware::require_auth;
 use crate::configuration::config::AppState;
+use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
+use crate::endpoints::alert_subscription::get_logic::{
+    self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
+};
+use crate::endpoints::alert_subscription::post_logic::{
+    self as alert_subscription_post_logic, AlertSubscriptionResponse,
+};
 use crate::endpoints::share::get_logic as share_get_logic;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::delete_logic as user_delete_logic;
@@ -87,6 +96,11 @@ impl Modify for SecurityAddon {
         endpoints::share::get_logic::handler,
         endpoints::share::update_logic::handler,
         endpoints::user_share::portfolio_logic::handler,
+        endpoints::alert_subscription::post_logic::subscribe_ticker,
+        endpoints::alert_subscription::post_logic::subscribe_portfolio,
+        endpoints::alert_subscription::delete_logic::unsubscribe_ticker,
+        endpoints::alert_subscription::delete_logic::unsubscribe_portfolio,
+        endpoints::alert_subscription::get_logic::handler,
     ),
     components(
         schemas(
@@ -111,6 +125,8 @@ impl Modify for SecurityAddon {
             PnlResponse,
             SharePnlItem,
             PortfolioPnlSummary,
+            AlertSubscriptionResponse,
+            ListAlertSubscriptionsResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -118,6 +134,7 @@ impl Modify for SecurityAddon {
         (name = "Authentication", description = "Endpoints for user identity management"),
         (name = "User", description = "Endpoints for retrieving authenticated user information"),
         (name = "Share", description = "Endpoints for managing the authenticated user's declared stock portfolio"),
+        (name = "Alerts", description = "Endpoints for subscribing to trend-change email alerts"),
         (name = "General", description = "General endpoints for knowing the status of the backend and other general information")
     ),
 )]
@@ -207,6 +224,20 @@ pub fn app_with_state(
             get(user_share_portfolio_logic::handler),
         )
         .route("/user/shares/pnl", get(user_share_pnl_logic::handler))
+        .route(
+            "/user/alerts/subscriptions",
+            get(alert_subscription_get_logic::handler),
+        )
+        .route(
+            "/user/alerts/subscriptions/portfolio",
+            post(alert_subscription_post_logic::subscribe_portfolio)
+                .delete(alert_subscription_delete_logic::unsubscribe_portfolio),
+        )
+        .route(
+            "/user/alerts/subscriptions/{ticker}",
+            post(alert_subscription_post_logic::subscribe_ticker)
+                .delete(alert_subscription_delete_logic::unsubscribe_ticker),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
