@@ -348,6 +348,189 @@
         ]
       }
     },
+    "/user/alerts/subscriptions": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Suscripciones a alertas del usuario autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAlertSubscriptionsResponse"
+                },
+                "example": {
+                  "portfolio": false,
+                  "tickers": [
+                    "GGAL",
+                    "YPFD"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/alerts/subscriptions/portfolio": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Suscribe al usuario autenticado a alertas por mail de toda su cartera\n(cualquier ticker que declare, presente o futuro).",
+        "operationId": "subscribe_portfolio",
+        "responses": {
+          "201": {
+            "description": "Suscripcion a toda la cartera creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "Ya existe una suscripcion a la cartera completa"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "unsubscribe_portfolio",
+        "responses": {
+          "204": {
+            "description": "Suscripcion a la cartera eliminada"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "No existe una suscripcion a la cartera completa"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/alerts/subscriptions/{ticker}": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Suscribe al usuario autenticado a alertas por mail de un ticker puntual.\nEl ticker tiene que estar en la cartera declarada del usuario (misma\nfuente que `/user/shares/trends`): no tiene sentido alertar sobre una\naccion que el usuario no sigue.",
+        "operationId": "subscribe_ticker",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker de la cartera del usuario a suscribir",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Suscripcion creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "El ticker no esta en la cartera declarada del usuario"
+          },
+          "409": {
+            "description": "Ya existe una suscripcion a este ticker"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "unsubscribe_ticker",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker a desuscribir",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Suscripcion eliminada"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "No existe una suscripcion a ese ticker"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares": {
       "get": {
         "tags": [
@@ -836,6 +1019,24 @@
   },
   "components": {
     "schemas": {
+      "AlertSubscriptionResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "CompareTrendsResponse": {
         "type": "object",
         "required": [
@@ -1017,6 +1218,25 @@
           "ts": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "ListAlertSubscriptionsResponse": {
+        "type": "object",
+        "required": [
+          "portfolio",
+          "tickers"
+        ],
+        "properties": {
+          "portfolio": {
+            "type": "boolean",
+            "description": "True si el usuario esta suscripto a toda su cartera (cualquier ticker\nque declare recibe alertas), no solo a los de `tickers`."
+          },
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -1579,6 +1799,10 @@
     {
       "name": "Share",
       "description": "Endpoints for managing the authenticated user's declared stock portfolio"
+    },
+    {
+      "name": "Alerts",
+      "description": "Endpoints for subscribing to trend-change email alerts"
     },
     {
       "name": "General",
