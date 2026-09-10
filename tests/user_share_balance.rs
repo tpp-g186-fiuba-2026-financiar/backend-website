@@ -1,8 +1,7 @@
-
 #[cfg(test)]
 mod tests {
     use backend_website::endpoints::user_share::user_share_balance_logic::{
-        calculate_share_balance, calculate_portfolio_balance,
+        calculate_portfolio_balance, calculate_share_balance,
     };
 
     #[test]
