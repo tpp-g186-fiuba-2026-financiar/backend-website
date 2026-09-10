@@ -1395,7 +1395,8 @@
               "string",
               "null"
             ]
-          }
+          },
+          "volatility_forecast": {}
         }
       },
       "PnlResponse": {
