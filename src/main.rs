@@ -84,6 +84,7 @@ async fn main() {
     let swagger = SwaggerUi::new("/swagger").url("/swagger-endpoints.json", ApiDoc::openapi());
 
     backend_website::alerts::spawn_daily_alert_job(pool.clone());
+    backend_website::reports::spawn_weekly_report_job(pool.clone());
 
     // Use nest_service instead of merge
     let router = app(pool, session_layer).layer(cors).merge(swagger);

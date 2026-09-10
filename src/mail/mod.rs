@@ -105,3 +105,87 @@ pub async fn send_trend_alert(
         .map(|_| ())
         .map_err(|err| format!("Fallo el envio SMTP: {err}"))
 }
+
+/// Una linea de tenencia dentro del reporte semanal (ver `src::reports`).
+pub struct WeeklyReportLine<'a> {
+    pub ticker: &'a str,
+    pub quantity: i32,
+    pub current_price: f64,
+    /// None cuando no habia cotizacion de hace 7 dias (ticker recien
+    /// incorporado al catalogo, feriado largo, etc.) -- la linea se manda
+    /// igual, solo sin el dato de variacion semanal.
+    pub week_change_pct: Option<f64>,
+    /// None cuando la tenencia no tiene precio de entrada cargado.
+    pub pnl_pct: Option<f64>,
+}
+
+pub struct WeeklyReport<'a> {
+    pub lines: &'a [WeeklyReportLine<'a>],
+    pub total_current_value: f64,
+    /// None cuando ninguna tenencia tiene variacion semanal resuelta.
+    pub total_week_change_pct: Option<f64>,
+}
+
+pub async fn send_weekly_report(
+    config: &MailConfig,
+    to_email: &str,
+    to_name: &str,
+    report: &WeeklyReport<'_>,
+) -> Result<(), String> {
+    let subject = "FinanciAr: tu resumen semanal de inversiones".to_string();
+
+    let mut lines_text = String::new();
+    for line in report.lines {
+        let change = match line.week_change_pct {
+            Some(pct) => format!("{:+.1}% en la semana", pct),
+            None => "sin variacion semanal disponible".to_string(),
+        };
+        let pnl = match line.pnl_pct {
+            Some(pct) => format!(", {:+.1}% desde tu precio de entrada", pct),
+            None => String::new(),
+        };
+        lines_text.push_str(&format!(
+            "- {ticker} x{quantity}: {price:.2} ({change}{pnl})\n",
+            ticker = line.ticker,
+            quantity = line.quantity,
+            price = line.current_price,
+        ));
+    }
+
+    let total_change_line = match report.total_week_change_pct {
+        Some(pct) => format!("Tu cartera se movio {pct:+.1}% esta semana.\n"),
+        None => String::new(),
+    };
+
+    let body = format!(
+        "Hola {to_name},\n\n\
+        Asi viene tu cartera esta semana:\n\n\
+        {lines_text}\n\
+        Valor total actual: {total_value:.2}.\n\
+        {total_change_line}\n\
+        Podes ver el detalle actualizado ingresando a tu cuenta de FinanciAr.\n\n\
+        Este mail se envia una vez por semana porque tenes acciones cargadas en tu cartera.",
+        total_value = report.total_current_value,
+    );
+
+    let email = Message::builder()
+        .from(
+            format!("{} <{}>", config.from_name, config.from_email)
+                .parse()
+                .map_err(|err| format!("From invalido: {err}"))?,
+        )
+        .to(format!("{to_name} <{to_email}>")
+            .parse()
+            .map_err(|err| format!("Destinatario invalido: {err}"))?)
+        .subject(subject)
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)
+        .map_err(|err| format!("No se pudo armar el mail: {err}"))?;
+
+    let transport = config.transport()?;
+    transport
+        .send(email)
+        .await
+        .map(|_| ())
+        .map_err(|err| format!("Fallo el envio SMTP: {err}"))
+}

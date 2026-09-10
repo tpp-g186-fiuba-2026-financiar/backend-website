@@ -4,6 +4,7 @@ pub mod configuration;
 pub mod database;
 pub mod endpoints;
 pub mod mail;
+pub mod reports;
 
 use axum::{
     middleware,
