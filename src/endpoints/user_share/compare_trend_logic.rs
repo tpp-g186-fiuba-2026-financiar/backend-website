@@ -26,6 +26,7 @@ pub struct ModelPredictionItem {
     pub model: Option<String>,
     pub model_version: Option<String>,
     pub backtest: Option<Value>,
+    pub volatility_forecast: Option<Value>,
     pub reason: Option<String>,
 }
 
@@ -298,31 +299,68 @@ async fn fetch_svm(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
     }
 }
 
+/// El `prediction` de GARCH en Modal viene como
+/// `{"h.1": {"<indice_pandas>": varianza}, "h.2": {...}, ...}` (un
+/// `DataFrame.to_dict()` de una sola fila): el indice interno no tiene
+/// significado para el front, asi que se aplana a una lista ordenada por
+/// horizonte con la volatilidad ya en las mismas unidades que los retornos
+/// (`%`, ver `garch_model.py`: la volatilidad es la raiz de la varianza, no
+/// hace falta reescalar).
+fn parse_garch_volatility(prediction: &Value) -> Option<Vec<Value>> {
+    let map = prediction.as_object()?;
+    let mut points: Vec<(i64, f64)> = map
+        .iter()
+        .filter_map(|(key, value)| {
+            let horizon = key.strip_prefix("h.")?.parse::<i64>().ok()?;
+            let variance = value.as_object()?.values().next()?.as_f64()?;
+            Some((horizon, variance))
+        })
+        .collect();
+    if points.is_empty() {
+        return None;
+    }
+    points.sort_by_key(|(horizon, _)| *horizon);
+    Some(
+        points
+            .into_iter()
+            .map(|(horizon, variance)| {
+                let volatility_pct = (variance.max(0.0).sqrt() * 100.0).round() / 100.0;
+                json!({ "horizon_days": horizon, "volatility_pct": volatility_pct })
+            })
+            .collect(),
+    )
+}
+
 /// GARCH (repo `models`, issue #159) pronostica volatilidad (varianza a 5
 /// dias), no una direccion: no tiene "signal" ni precio, asi que no
 /// participa del ranking de `pick_best_model` (no tiene
 /// `directional_accuracy`) ni se muestra como una prediccion de tendencia
 /// mas -- se marca `available: false` con motivo explicito en vez de
 /// inventar un signal "neutral" que seria enganoso. El backtest
-/// (`variance_mae`) igual se expone, por si en el futuro se le da un lugar
-/// propio en el front (ej: como medida de riesgo, no de tendencia).
+/// (`variance_mae`) y la proyeccion de volatilidad (`volatility_forecast`)
+/// igual se exponen, para que el front la muestre como medida de riesgo,
+/// no de tendencia (ver `TickerDetail.tsx`).
 async fn fetch_garch(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
     match client.get(url).query(&[("ticker", ticker)]).send().await {
         Ok(response) if response.status().is_success() => match response.json::<Value>().await {
-            Ok(body) if body.get("error").is_none() => json!({
-                "available": false,
-                "signal": null,
-                "condition": null,
-                "rsi": null,
-                "horizon_days": null,
-                "last_close": null,
-                "predicted_close": null,
-                "as_of": null,
-                "model": "garch-modal",
-                "model_version": body.get("model_version"),
-                "backtest": body.get("backtest"),
-                "reason": "GARCH proyecta volatilidad, no una direccion: no participa del comparador de tendencia"
-            }),
+            Ok(body) if body.get("error").is_none() => {
+                let volatility_forecast = body.get("prediction").and_then(parse_garch_volatility);
+                json!({
+                    "available": false,
+                    "signal": null,
+                    "condition": null,
+                    "rsi": null,
+                    "horizon_days": null,
+                    "last_close": null,
+                    "predicted_close": null,
+                    "as_of": null,
+                    "model": "garch-modal",
+                    "model_version": body.get("model_version"),
+                    "backtest": body.get("backtest"),
+                    "volatility_forecast": volatility_forecast,
+                    "reason": "GARCH proyecta volatilidad, no una direccion: no participa del comparador de tendencia"
+                })
+            }
             Ok(body) => unavailable(
                 body.get("error")
                     .and_then(Value::as_str)
@@ -469,5 +507,35 @@ mod pick_best_model_tests {
             ("arima-modal", json!({"available": false, "reason": "..."})),
         ]);
         assert_eq!(pick_best_model(&predictions), "lstm-modal");
+    }
+}
+
+#[cfg(test)]
+mod parse_garch_volatility_tests {
+    use super::parse_garch_volatility;
+    use serde_json::json;
+
+    #[test]
+    fn flattens_and_sorts_by_horizon() {
+        let prediction = json!({
+            "h.5": {"2441": 8.729070722313933},
+            "h.1": {"2441": 6.836204657283052},
+            "h.2": {"2441": 7.316327591867336},
+        });
+        let points = parse_garch_volatility(&prediction).expect("deberia parsear");
+        assert_eq!(
+            points,
+            vec![
+                json!({"horizon_days": 1, "volatility_pct": 2.61}),
+                json!({"horizon_days": 2, "volatility_pct": 2.7}),
+                json!({"horizon_days": 5, "volatility_pct": 2.95}),
+            ]
+        );
+    }
+
+    #[test]
+    fn returns_none_when_shape_is_unexpected() {
+        assert!(parse_garch_volatility(&json!("no es un objeto")).is_none());
+        assert!(parse_garch_volatility(&json!({})).is_none());
     }
 }
