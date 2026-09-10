@@ -255,14 +255,22 @@ pub async fn handler(
                 prices.insert(ticker, price);
             }
             Ok((ticker, Err(err))) => {
-                tracing::error!("Failed to fetch current price for {}: {:?}", ticker, err);
+                let detail = match &err {
+                    PriceFetchError::Request(source) => source.to_string(),
+                    PriceFetchError::Http(status) => format!("upstream returned {}", status),
+                    PriceFetchError::Empty => "no price data returned".to_string(),
+                    PriceFetchError::InvalidPrice(raw) => {
+                        format!("invalid price value '{}'", raw)
+                    }
+                };
+                tracing::error!("Failed to fetch current price for {}: {}", ticker, detail);
                 return (
                     StatusCode::BAD_GATEWAY,
                     Json(json!({
                         "code": 502,
                         "message": format!(
-                            "Could not retrieve current price data for {}. Please try again later.",
-                            ticker
+                            "Could not retrieve current price data for {} ({}). Please try again later.",
+                            ticker, detail
                         )
                     })),
                 );
