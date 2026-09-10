@@ -7,3 +7,4 @@ pub mod portfolio_logic;
 pub mod post_logic;
 pub mod put_logic;
 pub mod trend_logic;
+pub mod user_share_balance_logic;
