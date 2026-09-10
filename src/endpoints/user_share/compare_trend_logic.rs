@@ -81,15 +81,37 @@ pub async fn handler(
     for (key, value) in api_ml_models {
         predictions.insert(key, value);
     }
+    let default_model = pick_best_model(&predictions);
     (
         StatusCode::OK,
         Json(json!({
             "symbol": ticker,
             "as_of": as_of,
-            "default_model": "lstm-modal",
+            "default_model": default_model,
             "predictions": predictions
         })),
     )
+}
+
+/// Elige, entre los modelos con backtest, el de mejor accuracy direccional
+/// para este ticker puntual. El "default" ya no es un modelo fijo (antes
+/// siempre "lstm-modal"): cada ticker puede tener un ganador distinto segun
+/// como le fue prediciendolo. Si ninguno trae metricas todavia (Modal no
+/// respondio, poca historia), se cae al default historico.
+fn pick_best_model(predictions: &serde_json::Map<String, Value>) -> String {
+    predictions
+        .iter()
+        .filter(|(_, value)| value.get("available").and_then(Value::as_bool) == Some(true))
+        .filter_map(|(name, value)| {
+            let accuracy = value
+                .get("backtest")
+                .and_then(|backtest| backtest.get("directional_accuracy"))
+                .and_then(Value::as_f64)?;
+            Some((name, accuracy))
+        })
+        .max_by(|(_, left), (_, right)| left.total_cmp(right))
+        .map(|(name, _)| name.clone())
+        .unwrap_or_else(|| "lstm-modal".to_string())
 }
 
 /// Modelos locales de `api-ml` (lstm/xgboost/transformer/arima): un modelo
@@ -269,4 +291,56 @@ fn unavailable(reason: &str) -> Value {
         "backtest": null,
         "reason": reason
     })
+}
+
+#[cfg(test)]
+mod pick_best_model_tests {
+    use super::pick_best_model;
+    use serde_json::{json, Value};
+
+    fn predictions(entries: &[(&str, Value)]) -> serde_json::Map<String, Value> {
+        entries
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn prefers_higher_directional_accuracy() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.6}}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.8}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn ignores_unavailable_models() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": false, "reason": "No se pudo contactar a Modal"}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.55}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn falls_back_to_lstm_modal_when_nothing_has_metrics() {
+        let predictions = predictions(&[
+            ("lstm-modal", json!({"available": true})),
+            ("arima-modal", json!({"available": false, "reason": "..."})),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "lstm-modal");
+    }
 }
