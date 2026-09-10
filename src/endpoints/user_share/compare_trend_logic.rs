@@ -10,6 +10,8 @@ use crate::auth::middleware::AuthUser;
 const DEFAULT_LSTM_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
 const DEFAULT_XGBOOST_URL: &str = "https://matimorales01--xgboost-trend-model-main.modal.run";
 const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
+const DEFAULT_SVM_URL: &str = "https://matimorales01--svm-model-main.modal.run";
+const DEFAULT_GARCH_URL: &str = "https://matimorales01--garch-model-main.modal.run";
 
 #[derive(Serialize, ToSchema)]
 pub struct ModelPredictionItem {
@@ -60,12 +62,16 @@ pub async fn handler(
     let xgboost_url =
         std::env::var("MODAL_XGBOOST_URL").unwrap_or_else(|_| DEFAULT_XGBOOST_URL.into());
     let arima_url = std::env::var("MODAL_ARIMA_URL").unwrap_or_else(|_| DEFAULT_ARIMA_URL.into());
+    let svm_url = std::env::var("MODAL_SVM_URL").unwrap_or_else(|_| DEFAULT_SVM_URL.into());
+    let garch_url = std::env::var("MODAL_GARCH_URL").unwrap_or_else(|_| DEFAULT_GARCH_URL.into());
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, arima, api_ml_models) = tokio::join!(
+    let (lstm, xgboost, arima, svm, garch, api_ml_models) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
         fetch_arima(&client, &arima_url, &ticker),
+        fetch_svm(&client, &svm_url, &ticker),
+        fetch_garch(&client, &garch_url, &ticker),
         fetch_api_ml_local_models(&client, api_ml_url.as_deref(), &ticker),
     );
 
@@ -78,6 +84,8 @@ pub async fn handler(
     predictions.insert("lstm-modal".into(), lstm);
     predictions.insert("xgboost-modal".into(), xgboost);
     predictions.insert("arima-modal".into(), arima);
+    predictions.insert("svm-modal".into(), svm);
+    predictions.insert("garch-modal".into(), garch);
     for (key, value) in api_ml_models {
         predictions.insert(key, value);
     }
@@ -245,6 +253,91 @@ async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value
     }
 }
 
+/// SVM (repo `models`, issue #159): clasificador binario Buy/Sell sobre el
+/// retorno del dia siguiente. No predice un precio (a diferencia de
+/// lstm/xgboost/arima), asi que `last_close`/`predicted_close` quedan en
+/// null -- igual criterio que `rsi`/`condition` en ARIMA, que tampoco los
+/// puede calcular. Se preserva el `backtest` (`directional_accuracy`) tal
+/// cual para que compita de igual a igual en `pick_best_model`.
+async fn fetch_svm(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
+    match client.get(url).query(&[("ticker", ticker)]).send().await {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(body) if body.get("error").is_none() => {
+                let signal = match body.get("prediction").and_then(Value::as_str) {
+                    Some("Buy") => "alza",
+                    Some("Sell") => "baja",
+                    _ => return unavailable("SVM no devolvio una prediccion valida"),
+                };
+                json!({
+                    "available": true,
+                    "signal": signal,
+                    "condition": null,
+                    "rsi": null,
+                    "horizon_days": 1,
+                    "last_close": null,
+                    "predicted_close": null,
+                    "as_of": null,
+                    "model": "svm-modal",
+                    "model_version": body.get("model_version"),
+                    "backtest": body.get("backtest"),
+                    "reason": null
+                })
+            }
+            Ok(body) => unavailable(
+                body.get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("SVM devolvio una respuesta invalida"),
+            ),
+            Err(error) => unavailable(&format!("Respuesta invalida de SVM: {error}")),
+        },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable("Servicio de predicciones no disponible")
+        }
+        Ok(response) => unavailable(&format!("SVM respondio HTTP {}", response.status())),
+        Err(error) => unavailable(&format!("No se pudo contactar a SVM: {error}")),
+    }
+}
+
+/// GARCH (repo `models`, issue #159) pronostica volatilidad (varianza a 5
+/// dias), no una direccion: no tiene "signal" ni precio, asi que no
+/// participa del ranking de `pick_best_model` (no tiene
+/// `directional_accuracy`) ni se muestra como una prediccion de tendencia
+/// mas -- se marca `available: false` con motivo explicito en vez de
+/// inventar un signal "neutral" que seria enganoso. El backtest
+/// (`variance_mae`) igual se expone, por si en el futuro se le da un lugar
+/// propio en el front (ej: como medida de riesgo, no de tendencia).
+async fn fetch_garch(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
+    match client.get(url).query(&[("ticker", ticker)]).send().await {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(body) if body.get("error").is_none() => json!({
+                "available": false,
+                "signal": null,
+                "condition": null,
+                "rsi": null,
+                "horizon_days": null,
+                "last_close": null,
+                "predicted_close": null,
+                "as_of": null,
+                "model": "garch-modal",
+                "model_version": body.get("model_version"),
+                "backtest": body.get("backtest"),
+                "reason": "GARCH proyecta volatilidad, no una direccion: no participa del comparador de tendencia"
+            }),
+            Ok(body) => unavailable(
+                body.get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("GARCH devolvio una respuesta invalida"),
+            ),
+            Err(error) => unavailable(&format!("Respuesta invalida de GARCH: {error}")),
+        },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable("Servicio de predicciones no disponible")
+        }
+        Ok(response) => unavailable(&format!("GARCH respondio HTTP {}", response.status())),
+        Err(error) => unavailable(&format!("No se pudo contactar a GARCH: {error}")),
+    }
+}
+
 async fn fetch_modal(client: &reqwest::Client, name: &str, url: &str, ticker: &str) -> Value {
     match client
         .get(url)
@@ -333,6 +426,40 @@ mod pick_best_model_tests {
             ),
         ]);
         assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn svm_can_win_if_it_has_better_accuracy() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.5}}),
+            ),
+            (
+                "svm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.65, "observations": 60}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "svm-modal");
+    }
+
+    #[test]
+    fn garch_never_wins_because_it_has_no_directional_accuracy() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.5}}),
+            ),
+            (
+                "garch-modal",
+                json!({
+                    "available": false,
+                    "backtest": {"variance_mae": 10.6, "observations": 30},
+                    "reason": "GARCH proyecta volatilidad, no una direccion: no participa del comparador de tendencia"
+                }),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "lstm-modal");
     }
 
     #[test]
