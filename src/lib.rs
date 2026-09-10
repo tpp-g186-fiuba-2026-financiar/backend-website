@@ -19,7 +19,6 @@ use utoipa::{
     Modify, OpenApi,
 };
 
-use crate::auth::middleware::require_auth;
 use crate::configuration::config::AppState;
 use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
 use crate::endpoints::alert_subscription::get_logic::{
@@ -59,6 +58,7 @@ use crate::endpoints::user_share::trend_logic::{
 };
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
+use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
 
 pub struct SecurityAddon;
 
@@ -238,6 +238,10 @@ pub fn app_with_state(
             "/user/alerts/subscriptions/{ticker}",
             post(alert_subscription_post_logic::subscribe_ticker)
                 .delete(alert_subscription_delete_logic::unsubscribe_ticker),
+        )
+        .route(
+            "/user/shares/balance",
+            get(user_share_balance_logic::handler),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
