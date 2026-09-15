@@ -187,134 +187,134 @@ async fn subscribe_ticker_not_in_portfolio_returns_404() {
     cleanup_user(&state.pool, &email).await;
 }
 
-// #[tokio::test]
-// async fn subscribe_ticker_returns_201_then_conflicts_on_duplicate() {
-//     let state = setup().await;
-//     let email = unique_email("dup");
-//     let token = register_and_login(&state, &email, "StrongPassword123!").await;
-//     seed_catalog_ticker(&state.pool, "GGAL").await;
-//     add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
+#[tokio::test]
+async fn subscribe_ticker_returns_201_then_conflicts_on_duplicate() {
+    let state = setup().await;
+    let email = unique_email("dup");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "GGAL").await;
+    add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) =
-//         request(app, Method::POST, "/user/alerts/subscriptions/ggal", &token).await;
-//     assert_eq!(status, StatusCode::CREATED);
-//     assert_eq!(json["ticker"], "GGAL");
+    let app = build_app(state.clone()).await;
+    let (status, json) =
+        request(app, Method::POST, "/user/alerts/subscriptions/ggal", &token).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["ticker"], "GGAL");
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) =
-//         request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
-//     assert_eq!(status, StatusCode::CONFLICT);
-//     assert_eq!(json["code"], 409);
+    let app = build_app(state.clone()).await;
+    let (status, json) =
+        request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["code"], 409);
 
-//     cleanup_user(&state.pool, &email).await;
-// }
+    cleanup_user(&state.pool, &email).await;
+}
 
-// #[tokio::test]
-// async fn unsubscribe_ticker_removes_subscription() {
-//     let state = setup().await;
-//     let email = unique_email("unsub");
-//     let token = register_and_login(&state, &email, "StrongPassword123!").await;
-//     seed_catalog_ticker(&state.pool, "YPFD").await;
-//     add_share_to_portfolio(build_app(state.clone()).await, &token, "YPFD").await;
+#[tokio::test]
+async fn unsubscribe_ticker_removes_subscription() {
+    let state = setup().await;
+    let email = unique_email("unsub");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "YPFD").await;
+    add_share_to_portfolio(build_app(state.clone()).await, &token, "YPFD").await;
 
-//     let app = build_app(state.clone()).await;
-//     let (status, _) = request(app, Method::POST, "/user/alerts/subscriptions/YPFD", &token).await;
-//     assert_eq!(status, StatusCode::CREATED);
+    let app = build_app(state.clone()).await;
+    let (status, _) = request(app, Method::POST, "/user/alerts/subscriptions/YPFD", &token).await;
+    assert_eq!(status, StatusCode::CREATED);
 
-//     let app = build_app(state.clone()).await;
-//     let (status, _) = request(
-//         app,
-//         Method::DELETE,
-//         "/user/alerts/subscriptions/YPFD",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::NO_CONTENT);
+    let app = build_app(state.clone()).await;
+    let (status, _) = request(
+        app,
+        Method::DELETE,
+        "/user/alerts/subscriptions/YPFD",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) = request(
-//         app,
-//         Method::DELETE,
-//         "/user/alerts/subscriptions/YPFD",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::NOT_FOUND);
-//     assert_eq!(json["code"], 404);
+    let app = build_app(state.clone()).await;
+    let (status, json) = request(
+        app,
+        Method::DELETE,
+        "/user/alerts/subscriptions/YPFD",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json["code"], 404);
 
-//     cleanup_user(&state.pool, &email).await;
-// }
+    cleanup_user(&state.pool, &email).await;
+}
 
-// #[tokio::test]
-// async fn subscribe_and_unsubscribe_portfolio() {
-//     let state = setup().await;
-//     let email = unique_email("portfolio");
-//     let token = register_and_login(&state, &email, "StrongPassword123!").await;
+#[tokio::test]
+async fn subscribe_and_unsubscribe_portfolio() {
+    let state = setup().await;
+    let email = unique_email("portfolio");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) = request(
-//         app,
-//         Method::POST,
-//         "/user/alerts/subscriptions/portfolio",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::CREATED);
-//     assert!(json["ticker"].is_null());
+    let app = build_app(state.clone()).await;
+    let (status, json) = request(
+        app,
+        Method::POST,
+        "/user/alerts/subscriptions/portfolio",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(json["ticker"].is_null());
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) = request(
-//         app,
-//         Method::POST,
-//         "/user/alerts/subscriptions/portfolio",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::CONFLICT);
-//     assert_eq!(json["code"], 409);
+    let app = build_app(state.clone()).await;
+    let (status, json) = request(
+        app,
+        Method::POST,
+        "/user/alerts/subscriptions/portfolio",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["code"], 409);
 
-//     let app = build_app(state.clone()).await;
-//     let (status, _) = request(
-//         app,
-//         Method::DELETE,
-//         "/user/alerts/subscriptions/portfolio",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::NO_CONTENT);
+    let app = build_app(state.clone()).await;
+    let (status, _) = request(
+        app,
+        Method::DELETE,
+        "/user/alerts/subscriptions/portfolio",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
-//     cleanup_user(&state.pool, &email).await;
-// }
+    cleanup_user(&state.pool, &email).await;
+}
 
-// #[tokio::test]
-// async fn list_subscriptions_returns_tickers_and_portfolio_flag() {
-//     let state = setup().await;
-//     let email = unique_email("list");
-//     let token = register_and_login(&state, &email, "StrongPassword123!").await;
-//     seed_catalog_ticker(&state.pool, "GGAL").await;
-//     add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
+#[tokio::test]
+async fn list_subscriptions_returns_tickers_and_portfolio_flag() {
+    let state = setup().await;
+    let email = unique_email("list");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    seed_catalog_ticker(&state.pool, "GGAL").await;
+    add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
 
-//     let app = build_app(state.clone()).await;
-//     let (status, _) = request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
-//     assert_eq!(status, StatusCode::CREATED);
+    let app = build_app(state.clone()).await;
+    let (status, _) = request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
+    assert_eq!(status, StatusCode::CREATED);
 
-//     let app = build_app(state.clone()).await;
-//     let (status, _) = request(
-//         app,
-//         Method::POST,
-//         "/user/alerts/subscriptions/portfolio",
-//         &token,
-//     )
-//     .await;
-//     assert_eq!(status, StatusCode::CREATED);
+    let app = build_app(state.clone()).await;
+    let (status, _) = request(
+        app,
+        Method::POST,
+        "/user/alerts/subscriptions/portfolio",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
 
-//     let app = build_app(state.clone()).await;
-//     let (status, json) = request(app, Method::GET, "/user/alerts/subscriptions", &token).await;
+    let app = build_app(state.clone()).await;
+    let (status, json) = request(app, Method::GET, "/user/alerts/subscriptions", &token).await;
 
-//     assert_eq!(status, StatusCode::OK);
-//     assert_eq!(json["portfolio"], true);
-//     assert_eq!(json["tickers"].as_array().unwrap(), &vec![json!("GGAL")]);
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["portfolio"], true);
+    assert_eq!(json["tickers"].as_array().unwrap(), &vec![json!("GGAL")]);
 
-//     cleanup_user(&state.pool, &email).await;
-// }
+    cleanup_user(&state.pool, &email).await;
+}
