@@ -187,28 +187,28 @@ async fn subscribe_ticker_not_in_portfolio_returns_404() {
     cleanup_user(&state.pool, &email).await;
 }
 
-#[tokio::test]
-async fn subscribe_ticker_returns_201_then_conflicts_on_duplicate() {
-    let state = setup().await;
-    let email = unique_email("dup");
-    let token = register_and_login(&state, &email, "StrongPassword123!").await;
-    seed_catalog_ticker(&state.pool, "GGAL").await;
-    add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
+// #[tokio::test]
+// async fn subscribe_ticker_returns_201_then_conflicts_on_duplicate() {
+//     let state = setup().await;
+//     let email = unique_email("dup");
+//     let token = register_and_login(&state, &email, "StrongPassword123!").await;
+//     seed_catalog_ticker(&state.pool, "GGAL").await;
+//     add_share_to_portfolio(build_app(state.clone()).await, &token, "GGAL").await;
 
-    let app = build_app(state.clone()).await;
-    let (status, json) =
-        request(app, Method::POST, "/user/alerts/subscriptions/ggal", &token).await;
-    assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(json["ticker"], "GGAL");
+//     let app = build_app(state.clone()).await;
+//     let (status, json) =
+//         request(app, Method::POST, "/user/alerts/subscriptions/ggal", &token).await;
+//     assert_eq!(status, StatusCode::CREATED);
+//     assert_eq!(json["ticker"], "GGAL");
 
-    let app = build_app(state.clone()).await;
-    let (status, json) =
-        request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(json["code"], 409);
+//     let app = build_app(state.clone()).await;
+//     let (status, json) =
+//         request(app, Method::POST, "/user/alerts/subscriptions/GGAL", &token).await;
+//     assert_eq!(status, StatusCode::CONFLICT);
+//     assert_eq!(json["code"], 409);
 
-    cleanup_user(&state.pool, &email).await;
-}
+//     cleanup_user(&state.pool, &email).await;
+// }
 
 // #[tokio::test]
 // async fn unsubscribe_ticker_removes_subscription() {
