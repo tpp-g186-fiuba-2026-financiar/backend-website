@@ -78,7 +78,7 @@ pub async fn handler(
         tracing::error!("Database query failed during /user lookup: {}", e);
         None
     })
-    .map(|row| (row.risk_profile, row.has_to_redo_risk_profile))
+    .map(|row| (Some(row.risk_profile), row.has_to_redo_risk_profile))
     .unwrap_or_else(|| (None, Some(true)));
 
     match row {

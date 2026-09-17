@@ -31,7 +31,7 @@ pub async fn require_profile(
 
     let row = sqlx::query!(
         r#"
-        SELECT risk_profile, expires_at
+        SELECT risk_profile, expires_at as "expires_at: chrono::DateTime<chrono::Utc>"
         FROM user_investing_profiles
         WHERE user_id = $1
         ORDER BY created_at DESC
