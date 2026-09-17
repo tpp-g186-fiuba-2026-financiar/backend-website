@@ -212,7 +212,12 @@ async fn notify_subscribers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::State, routing::get, Json, Router};
     use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    };
 
     #[test]
     fn condition_changed_detects_difference() {
@@ -233,5 +238,134 @@ mod tests {
         let previous = json!({ "condition": "neutral" });
         let fresh = json!({ "condition": Value::Null });
         assert!(!condition_changed(&previous, &fresh));
+    }
+
+    async fn trend_stub(State(condition): State<Arc<AtomicU8>>) -> Json<Value> {
+        let condition = match condition.load(Ordering::Relaxed) {
+            0 => "neutral",
+            1 => "sobrecompra",
+            _ => "sobreventa",
+        };
+        Json(json!({
+            "signal": "alza",
+            "condition": condition,
+            "rsi": 72.0,
+            "horizon_days": 5,
+            "last_close": 100.0,
+            "predicted_close": 110.0,
+            "as_of": "2026-09-17",
+            "model_version": "alert-test"
+        }))
+    }
+
+    #[tokio::test]
+    async fn alert_job_queries_subscribers_detects_change_and_updates_cache() {
+        let _env_guard = crate::ENV_TEST_LOCK.lock().await;
+        dotenvy::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let pool = PgPool::connect(&database_url).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let email = format!("alert_job_{suffix}@test.com");
+        let ticker = format!("A{}", suffix % 1_000_000);
+        let user_id: i32 = sqlx::query_scalar(
+            "INSERT INTO users (email, password_hash, full_name, risk_profile) VALUES ($1, 'hash', 'Alert Job', 'moderate') RETURNING id",
+        )
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let share_id: i32 =
+            sqlx::query_scalar("INSERT INTO shares (ticker) VALUES ($1) RETURNING id")
+                .bind(&ticker)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO user_shares (user_id, share_id, quantity, entry_price) VALUES ($1, $2, 1, 100.0)",
+        )
+        .bind(user_id)
+        .bind(share_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO alert_subscriptions (user_id, share_id) VALUES ($1, $2)")
+            .bind(user_id)
+            .bind(share_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO alert_subscriptions (user_id, share_id) VALUES ($1, NULL)")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM ticker_trend_cache WHERE ticker = $1")
+            .bind(&ticker)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let condition = Arc::new(AtomicU8::new(0));
+        let stub = Router::new()
+            .route("/trend", get(trend_stub))
+            .with_state(condition.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, stub).await.unwrap() });
+        std::env::set_var("MODAL_LSTM_URL", format!("http://{address}/trend"));
+
+        check_trend_changes(&pool, None).await.unwrap();
+        let cached = current_cached_payload(&pool, &ticker)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached["condition"], "neutral");
+
+        condition.store(1, Ordering::Relaxed);
+        check_trend_changes(&pool, None).await.unwrap();
+        let cached = current_cached_payload(&pool, &ticker)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached["condition"], "sobrecompra");
+
+        condition.store(2, Ordering::Relaxed);
+        let invalid_mail = MailConfig {
+            host: "invalid host".to_string(),
+            port: 587,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            from_email: "alertas@financiar.test".to_string(),
+            from_name: "FinanciAr".to_string(),
+        };
+        check_trend_changes(&pool, Some(&invalid_mail))
+            .await
+            .unwrap();
+        let cached = current_cached_payload(&pool, &ticker)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached["condition"], "sobreventa");
+
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM shares WHERE id = $1")
+            .bind(share_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM ticker_trend_cache WHERE ticker = $1")
+            .bind(&ticker)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
 }

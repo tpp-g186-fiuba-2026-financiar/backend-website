@@ -150,9 +150,10 @@ async fn portfolio_recomendacion_without_risk_profile_returns_400() {
 
 #[tokio::test]
 async fn portfolio_recomendacion_without_api_ml_url_configured_returns_500() {
-    std::env::remove_var("API_ML_URL");
-
     let state = setup().await;
+    // `setup` loads `.env`; remove the value afterwards so this test is
+    // deterministic even when the developer has API_ML_URL configured there.
+    std::env::remove_var("API_ML_URL");
     let email = unique_email("noapiml");
     let token = register_and_login(&state, &email, "StrongPassword123!", Some("moderate")).await;
 

@@ -53,8 +53,14 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:password@localhost:5432/test_db
 
-      - name: Run tests
-        run: cargo test
+      - name: Install coverage tooling
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run tests with 80% line coverage
+        run: >-
+          cargo llvm-cov --all-targets --summary-only
+          --ignore-filename-regex '(main\.rs|configuration/config\.rs|database/db\.rs)'
+          --fail-under-lines 80
         env:
           DATABASE_URL: postgres://postgres:password@localhost:5432/test_db
           SQLX_OFFLINE: true

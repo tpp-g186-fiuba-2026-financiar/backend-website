@@ -6,6 +6,10 @@ pub mod endpoints;
 pub mod mail;
 pub mod reports;
 
+#[cfg(test)]
+pub static ENV_TEST_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
 use axum::{
     middleware,
     routing::{get, patch, post, put},

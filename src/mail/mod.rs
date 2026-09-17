@@ -189,3 +189,39 @@ pub async fn send_weekly_report(
         .map(|_| ())
         .map_err(|err| format!("Fallo el envio SMTP: {err}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mail_config_reads_defaults_and_explicit_values() {
+        std::env::remove_var("SMTP_HOST");
+        assert!(MailConfig::from_env().is_none());
+
+        std::env::set_var("SMTP_HOST", "smtp.example.test");
+        std::env::set_var("SMTP_PORT", "invalid");
+        std::env::remove_var("SMTP_USERNAME");
+        std::env::remove_var("SMTP_PASSWORD");
+        std::env::remove_var("SMTP_FROM_EMAIL");
+        std::env::remove_var("SMTP_FROM_NAME");
+        let defaults = MailConfig::from_env().unwrap();
+        assert_eq!(defaults.port, 587);
+        assert_eq!(defaults.from_email, "alertas@financiar.app");
+        assert_eq!(defaults.from_name, "FinanciAr");
+
+        std::env::set_var("SMTP_PORT", "2525");
+        std::env::set_var("SMTP_USERNAME", "mailer");
+        std::env::set_var("SMTP_PASSWORD", "secret");
+        std::env::set_var("SMTP_FROM_EMAIL", "mail@example.test");
+        std::env::set_var("SMTP_FROM_NAME", "Coverage");
+        let explicit = MailConfig::from_env().unwrap();
+        assert_eq!(explicit.port, 2525);
+        assert_eq!(explicit.username, "mailer");
+        assert_eq!(explicit.password, "secret");
+        assert_eq!(explicit.from_email, "mail@example.test");
+        assert_eq!(explicit.from_name, "Coverage");
+
+        std::env::remove_var("SMTP_HOST");
+    }
+}

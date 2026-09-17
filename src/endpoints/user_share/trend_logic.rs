@@ -377,3 +377,81 @@ fn needs_preparation(trend: &Value) -> bool {
         .and_then(Value::as_str)
         .is_some_and(|reason| reason.contains("todavia no hay un modelo entrenado"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        http::StatusCode,
+        response::IntoResponse,
+        routing::{get, post},
+        Json, Router,
+    };
+
+    async fn start_stub() -> String {
+        let app = Router::new()
+            .route(
+                "/model-error",
+                get(|| async { Json(json!({"error": "todavia no hay un modelo entrenado"})) }),
+            )
+            .route("/invalid", get(|| async { "not-json" }))
+            .route(
+                "/missing",
+                get(|| async { StatusCode::NOT_FOUND.into_response() }),
+            )
+            .route(
+                "/failure",
+                get(|| async { StatusCode::INTERNAL_SERVER_ERROR.into_response() }),
+            )
+            .route(
+                "/prepare",
+                get(|| async {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    StatusCode::OK
+                }),
+            )
+            .route("/discover/{ticker}", post(|| async { StatusCode::OK }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn trend_client_maps_model_http_parse_and_transport_failures() {
+        let _env_guard = crate::ENV_TEST_LOCK.lock().await;
+        let base = start_stub().await;
+        let client = reqwest::Client::new();
+
+        let model_error = fetch_trend(&client, &format!("{base}/model-error"), "GGAL").await;
+        assert_eq!(model_error["available"], false);
+        assert_eq!(model_error["retryable"], false);
+        assert!(needs_preparation(&model_error));
+
+        let invalid = fetch_trend(&client, &format!("{base}/invalid"), "GGAL").await;
+        assert_eq!(invalid["reason"], "Respuesta invalida de Modal");
+        assert_eq!(invalid["retryable"], true);
+
+        let missing = fetch_trend(&client, &format!("{base}/missing"), "GGAL").await;
+        assert_eq!(missing["reason"], "Servicio de predicciones no disponible");
+        assert_eq!(missing["retryable"], false);
+
+        let failure = fetch_trend(&client, &format!("{base}/failure"), "GGAL").await;
+        assert_eq!(failure["reason"], "Modal no pudo predecir para este ticker");
+        assert_eq!(failure["retryable"], true);
+
+        let transport = fetch_trend(&client, "http://127.0.0.1:1", "GGAL").await;
+        assert_eq!(transport["reason"], "No se pudo contactar a Modal");
+        assert!(!needs_preparation(&transport));
+
+        std::env::set_var("MODAL_LSTM_PREPARE_URL", format!("{base}/prepare"));
+        std::env::set_var("MODAL_XGBOOST_PREPARE_URL", format!("{base}/prepare"));
+        std::env::set_var("DATA_COLLECTOR_URL", format!("{base}/discover"));
+        assert!(prepare_models_in_background("COV-A"));
+        assert!(!prepare_models_in_background("COV-A"));
+        assert!(prepare_models_in_background("COV-B"));
+        assert!(!prepare_models_in_background("COV-C"));
+        discover_ticker_for_training("COV-A");
+        tokio::time::sleep(Duration::from_millis(180)).await;
+    }
+}

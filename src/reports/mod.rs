@@ -309,6 +309,8 @@ fn pnl_percentage(current: f64, entry: Option<f64>) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::Path, routing::post, Json, Router};
+    use serde_json::json;
 
     fn ts(day: i64) -> i64 {
         day * 86_400_000
@@ -374,5 +376,80 @@ mod tests {
         assert!(is_report_day(Weekday::Mon));
         assert!(!is_report_day(Weekday::Tue));
         assert!(!is_report_day(Weekday::Sun));
+    }
+
+    async fn history_stub(Path(_ticker): Path<String>) -> Json<Value> {
+        Json(json!({
+            "data": [
+                {"ts": ts(0), "close_amount": "100.0"},
+                {"ts": ts(7), "close_amount": 110.0},
+                {"ts": ts(14), "close_amount": "125.0"},
+                {"ts": ts(13), "close_amount": "invalid"}
+            ]
+        }))
+    }
+
+    #[tokio::test]
+    async fn weekly_report_loads_holdings_prices_and_builds_mail() {
+        let _env_guard = crate::ENV_TEST_LOCK.lock().await;
+        dotenvy::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let pool = PgPool::connect(&database_url).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let email = format!("weekly_report_{suffix}@test.com");
+        let ticker = format!("R{}", suffix % 1_000_000);
+        let user_id: i32 = sqlx::query_scalar(
+            "INSERT INTO users (email, password_hash, full_name, risk_profile) VALUES ($1, 'hash', 'Weekly Report', 'moderate') RETURNING id",
+        )
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let share_id: i32 =
+            sqlx::query_scalar("INSERT INTO shares (ticker) VALUES ($1) RETURNING id")
+                .bind(&ticker)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO user_shares (user_id, share_id, quantity, entry_price) VALUES ($1, $2, 3, 90.0)",
+        )
+        .bind(user_id)
+        .bind(share_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let stub = Router::new().route("/historical-data/{ticker}", post(history_stub));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, stub).await.unwrap() });
+        std::env::set_var("DATA_COLLECTOR_URL", format!("http://{address}"));
+
+        send_weekly_reports(&pool, None).await.unwrap();
+        let mail = MailConfig {
+            host: "invalid host".to_string(),
+            port: 587,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            from_email: "alertas@financiar.test".to_string(),
+            from_name: "FinanciAr".to_string(),
+        };
+        send_weekly_reports(&pool, Some(&mail)).await.unwrap();
+
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM shares WHERE id = $1")
+            .bind(share_id)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
 }

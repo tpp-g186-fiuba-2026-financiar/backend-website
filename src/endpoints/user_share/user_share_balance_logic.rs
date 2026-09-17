@@ -427,3 +427,77 @@ pub async fn handler(
     let portfolio = calculate_portfolio_balance(shares);
     (StatusCode::OK, Json(json!(portfolio))).into_response()
 }
+
+#[cfg(test)]
+mod client_tests {
+    use super::*;
+    use axum::{
+        extract::{Path, State},
+        response::Response,
+        routing::post,
+        Router,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    async fn history_stub(
+        State(attempts): State<Arc<AtomicUsize>>,
+        Path(ticker): Path<String>,
+    ) -> Response {
+        match ticker.as_str() {
+            "BAD" => StatusCode::BAD_REQUEST.into_response(),
+            "INVALID" => "not-json".into_response(),
+            "RETRY" if attempts.fetch_add(1, Ordering::Relaxed) < 2 => {
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+            _ => Json(json!({
+                "data": [
+                    {"close_amount": "100.0", "ts": 1},
+                    {"close_amount": "125.5", "ts": 2}
+                ]
+            }))
+            .into_response(),
+        }
+    }
+
+    #[tokio::test]
+    async fn history_client_retries_and_maps_http_parse_and_transport_errors() {
+        let _env_guard = crate::ENV_TEST_LOCK.lock().await;
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let stub = Router::new()
+            .route("/historical-data/{ticker}", post(history_stub))
+            .with_state(attempts.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, stub).await.unwrap() });
+        std::env::set_var("DATA_COLLECTOR_URL", format!("http://{address}"));
+
+        let history = fetch_ticker_history(" ok ").await.unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(latest_price(&history).unwrap(), 125.5);
+
+        let retry = fetch_ticker_history("retry").await.unwrap();
+        assert_eq!(retry.len(), 2);
+        assert_eq!(attempts.load(Ordering::Relaxed), 3);
+
+        let http = fetch_ticker_history("bad").await.unwrap_err();
+        assert!(price_error_detail(&http).contains("upstream returned"));
+        assert_eq!(
+            bad_gateway_response("BAD", &http).status(),
+            StatusCode::BAD_GATEWAY
+        );
+
+        let parse = fetch_ticker_history("invalid").await.unwrap_err();
+        assert!(!price_error_detail(&parse).is_empty());
+
+        std::env::set_var("DATA_COLLECTOR_URL", "http://127.0.0.1:1");
+        let transport = fetch_ticker_history("offline").await.unwrap_err();
+        assert!(!price_error_detail(&transport).is_empty());
+        assert_eq!(
+            internal_error_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+}
