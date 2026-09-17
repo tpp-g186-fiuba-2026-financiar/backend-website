@@ -6,6 +6,9 @@ use sqlx::PgPool;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
+use crate::endpoints::user_share::user_share_operations::{
+    fetch_current_price, record_operation, OperationType,
+};
 
 const MAX_TICKER_LEN: usize = 20;
 
@@ -15,7 +18,9 @@ pub struct CreateShareRequest {
     pub ticker: String,
     #[schema(example = 10)]
     pub quantity: i32,
-    /// Precio de entrada (precio pagado por accion). Opcional.
+    /// Precio de entrada (precio pagado por accion). Opcional — si se
+    /// omite, se resuelve con el precio de mercado actual en el momento
+    /// de la creacion.
     #[serde(default)]
     #[schema(example = 1520.50)]
     pub entry_price: Option<f64>,
@@ -74,6 +79,10 @@ pub struct CreateShareResponse {
         (status = 409, description = "The authenticated user already has this ticker in their portfolio", example = json!({
             "code": 409,
             "message": "Share already exists for that ticker. Use PUT to update the quantity."
+        })),
+        (status = 502, description = "Failed to resolve a current price to use as entry_price", example = json!({
+            "code": 502,
+            "message": "Could not retrieve current price data for GGAL. Please try again later."
         })),
         (status = 500, description = "Internal server error", example = json!({
             "code": 500,
@@ -147,7 +156,7 @@ pub async fn handler(
         WHERE ticker = $1
         "#,
     )
-    .bind(ticker)
+    .bind(&ticker)
     .fetch_one(&pool)
     .await;
 
@@ -161,6 +170,42 @@ pub async fn handler(
         }
     };
 
+    // Every ledger entry needs a price. If the caller didn't provide one,
+    // resolve it live so entry_price is never left NULL for new
+    // purchases (only pre-existing rows from before this ledger existed
+    // can still have a NULL entry_price).
+    let resolved_entry_price = match payload.entry_price {
+        Some(price) => price,
+        None => match fetch_current_price(&ticker).await {
+            Ok(price) => price,
+            Err(err) => {
+                tracing::error!(
+                    "Failed to resolve current price for {} on create: {:?}",
+                    ticker,
+                    err
+                );
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({
+                        "code": 502,
+                        "message": format!(
+                            "Could not retrieve current price data for {}. Please try again later.",
+                            ticker
+                        )
+                    })),
+                );
+            }
+        },
+    };
+
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start transaction for share creation: {}", err);
+            return internal_error();
+        }
+    };
+
     let insert_result = sqlx::query_as::<_, (i32, i32, i32, i32, Option<f64>, DateTime<Utc>)>(
         r#"
         INSERT INTO user_shares (user_id, share_id, quantity, entry_price)
@@ -171,39 +216,67 @@ pub async fn handler(
     .bind(auth_user.user_id)
     .bind(share_id)
     .bind(payload.quantity)
-    .bind(payload.entry_price)
-    .fetch_one(&pool)
+    .bind(resolved_entry_price)
+    .fetch_one(&mut *tx)
     .await;
-    match insert_result {
-        Ok((id, user_id, _share_id, quantity, entry_price, created_at)) => (
-            StatusCode::CREATED,
-            Json(json!({
-                "id": id,
-                "user_id": user_id,
-                "ticker": ticker,
-                "quantity": quantity,
-                "entry_price": entry_price,
-                "created_at": created_at,
-            })),
-        ),
-        Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => (
-            StatusCode::CONFLICT,
-            Json(json!({
-                "code": 409,
-                "message": "Share already exists for that ticker. Use PUT to update the quantity."
-            })),
-        ),
+
+    let (id, user_id, _share_id, quantity, entry_price, created_at) = match insert_result {
+        Ok(row) => row,
+        Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "code": 409,
+                    "message": "Share already exists for that ticker. Use PUT to update the quantity."
+                })),
+            );
+        }
         Err(err) => {
             tracing::error!("Failed to insert share: {}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "code": 500,
-                    "message": "An unexpected error occurred. Please try again later."
-                })),
-            )
+            return internal_error();
         }
+    };
+
+    if let Err(err) = record_operation(
+        &mut tx,
+        user_id,
+        share_id,
+        OperationType::Buy,
+        quantity,
+        resolved_entry_price,
+    )
+    .await
+    {
+        tracing::error!("Failed to record buy operation: {}", err);
+        return internal_error();
     }
+
+    if let Err(err) = tx.commit().await {
+        tracing::error!("Failed to commit share creation: {}", err);
+        return internal_error();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(json!({
+            "id": id,
+            "user_id": user_id,
+            "ticker": ticker,
+            "quantity": quantity,
+            "entry_price": entry_price,
+            "created_at": created_at,
+        })),
+    )
+}
+
+fn internal_error() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({
+            "code": 500,
+            "message": "An unexpected error occurred. Please try again later."
+        })),
+    )
 }
 
 fn is_valid_ticker(ticker: &str) -> bool {
