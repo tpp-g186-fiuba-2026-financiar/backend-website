@@ -13,6 +13,7 @@ pub struct GetUserResponse {
     pub email: String,
     pub full_name: String,
     pub risk_profile: Option<String>,
+    pub has_to_redo_risk_profile: bool,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
 }
@@ -26,6 +27,7 @@ pub struct GetUserResponse {
             "email": "financiar186@gmail.com",
             "full_name": "John Doe",
             "risk_profile": "moderate",
+            "has_to_redo_risk_profile": false,
             "is_active": true,
             "created_at": "2026-05-13T12:00:00Z"
         })),
@@ -51,14 +53,35 @@ pub async fn handler(
 ) -> impl IntoResponse {
     let row = sqlx::query!(
         r#"
-        SELECT id, email, full_name, risk_profile, is_active, created_at
+        SELECT id, email, full_name, is_active, created_at
         FROM users
-        WHERE id = $1
+        WHERE users.id = $1
         "#,
         auth_user.user_id
     )
     .fetch_optional(&pool)
     .await;
+
+    let (risk_profile, has_to_redo_risk_profile) = sqlx::query!(
+        r#"
+        SELECT 
+        risk_profile, 
+        (NOW() > created_at + INTERVAL '6 months') AS has_to_redo_risk_profile
+        FROM user_investing_profiles
+        WHERE user_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1;
+        "#,
+        auth_user.user_id
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!("Database query failed during /user lookup: {}", e);
+        None
+    })
+    .map(|row| (row.risk_profile, row.has_to_redo_risk_profile))
+    .unwrap_or_else(|| (None, false));
 
     match row {
         Ok(Some(user)) => (
@@ -68,6 +91,7 @@ pub async fn handler(
                 "email": user.email,
                 "full_name": user.full_name,
                 "risk_profile": user.risk_profile,
+                "has_to_redo_risk_profile": has_to_redo_risk_profile,
                 "is_active": user.is_active,
                 "created_at": user.created_at,
             })),

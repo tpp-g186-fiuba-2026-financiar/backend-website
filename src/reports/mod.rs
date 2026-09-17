@@ -403,12 +403,25 @@ mod tests {
         let email = format!("weekly_report_{suffix}@test.com");
         let ticker = format!("R{}", suffix % 1_000_000);
         let user_id: i32 = sqlx::query_scalar(
-            "INSERT INTO users (email, password_hash, full_name, risk_profile) VALUES ($1, 'hash', 'Weekly Report', 'moderate') RETURNING id",
+            "INSERT INTO users (email, password_hash, full_name) VALUES ($1, 'hash', 'Weekly Report') RETURNING id",
         )
         .bind(&email)
         .fetch_one(&pool)
         .await
         .unwrap();
+
+        let insert_profile_result = sqlx::query(
+            "INSERT INTO user_investing_profiles (user_id, risk_profile, created_at, expires_at, is_active) VALUES ($1, 'moderate', NOW(), NOW() + INTERVAL '6 months', TRUE)",
+        )
+        .bind(user_id)
+        .execute(&pool)
+        .await;
+
+        if let Err(err) = insert_profile_result {
+            tracing::error!("Failed to insert risk profile: {}", err);
+            return;
+        }
+
         let share_id: i32 =
             sqlx::query_scalar("INSERT INTO shares (ticker) VALUES ($1) RETURNING id")
                 .bind(&ticker)

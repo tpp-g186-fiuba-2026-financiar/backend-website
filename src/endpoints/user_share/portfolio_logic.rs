@@ -89,11 +89,23 @@ pub async fn handler(
     Query(query): Query<PortfolioQuery>,
 ) -> impl IntoResponse {
     // Perfil de riesgo del usuario (mismo campo que expone GET /user).
-    let risk_profile = sqlx::query_as::<_, (Option<String>,)>(
+    /*let risk_profile = sqlx::query_as::<_, (Option<String>,)>(
         r#"
         SELECT risk_profile
         FROM users
         WHERE id = $1
+        "#,
+    )
+    .bind(auth_user.user_id)
+    .fetch_optional(&pool)
+    .await;*/
+    let risk_profile = sqlx::query_as::<_, (Option<String>,)>(
+        r#"
+        SELECT risk_profile
+        FROM user_investing_profiles
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
         "#,
     )
     .bind(auth_user.user_id)

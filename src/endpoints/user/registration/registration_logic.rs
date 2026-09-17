@@ -137,25 +137,50 @@ pub async fn handler(
         }
     };
 
-    let insert_result = sqlx::query(
+    let user_id_result = sqlx::query_scalar!(
         r#"
-        INSERT INTO users (email, password_hash, full_name, risk_profile) 
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO users (email, password_hash, full_name) 
+        VALUES ($1, $2, $3)
+        RETURNING id
         "#,
+        payload.email.trim(),
+        hashed_password,
+        payload.full_name
     )
-    .bind(payload.email.trim())
-    .bind(hashed_password)
-    .bind(payload.full_name)
-    .bind(payload.risk_profile)
-    .execute(&pool)
+    .fetch_one(&pool)
     .await;
 
-    if let Err(err) = insert_result {
-        tracing::error!("Failed to insert new user: {}", err);
-        return axum::response::Json(json!({
-            "code": 500,
-            "message": "An unexpected error occurred while saving the user."
-        }));
+    let user_id = match user_id_result {
+        Ok(id) => id,
+        Err(err) => {
+            tracing::error!("Failed to insert new user: {}", err);
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the user."
+            }));
+        }
+    };
+
+    // 2. Now insert the risk profile using the retrieved user_id
+    if let Some(ref profile) = payload.risk_profile {
+        let insert_risk_profile_result = sqlx::query(
+            r#"
+            INSERT INTO user_investing_profiles (user_id, risk_profile, created_at, expires_at, is_active)
+            VALUES ($1, $2, NOW(), NOW() + INTERVAL '6 months', TRUE)
+            "#,
+        )
+        .bind(user_id)
+        .bind(profile)
+        .execute(&pool)
+        .await;
+
+        if let Err(err) = insert_risk_profile_result {
+            tracing::error!("Failed to insert risk profile: {}", err);
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the risk profile."
+            }));
+        }
     }
 
     // --- 5. Success ---

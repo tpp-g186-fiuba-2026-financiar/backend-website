@@ -87,7 +87,7 @@ async fn main() {
     backend_website::reports::spawn_weekly_report_job(pool.clone());
 
     // Use nest_service instead of merge
-    let router = app(pool, session_layer).layer(cors).merge(swagger);
+    let router = app(pool.clone(), session_layer).layer(cors).merge(swagger);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = TcpListener::bind(addr)
@@ -105,6 +105,11 @@ async fn main() {
             session_store.delete_expired().await.unwrap_or_else(|err| {
                 tracing::error!("Failed to delete expired sessions: {}", err);
             });
+            db::update_expired_investing_profiles(&pool)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::error!("Failed to update expired investing profiles: {}", err);
+                });
         }
     });
     axum::serve(listener, router).await.unwrap();

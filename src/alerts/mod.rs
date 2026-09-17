@@ -273,12 +273,21 @@ mod tests {
         let email = format!("alert_job_{suffix}@test.com");
         let ticker = format!("A{}", suffix % 1_000_000);
         let user_id: i32 = sqlx::query_scalar(
-            "INSERT INTO users (email, password_hash, full_name, risk_profile) VALUES ($1, 'hash', 'Alert Job', 'moderate') RETURNING id",
+            "INSERT INTO users (email, password_hash, full_name) VALUES ($1, 'hash', 'Alert Job') RETURNING id",
         )
         .bind(&email)
         .fetch_one(&pool)
         .await
         .unwrap();
+        // lets insert the user investing profile
+        let user_id: i32 = sqlx::query_scalar(
+            "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate') RETURNING id",
+        )
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
         let share_id: i32 =
             sqlx::query_scalar("INSERT INTO shares (ticker) VALUES ($1) RETURNING id")
                 .bind(&ticker)
