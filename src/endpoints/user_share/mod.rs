@@ -1,3 +1,4 @@
+pub mod balance_history_logic;
 pub mod compare_trend_logic;
 pub mod delete_logic;
 pub mod get_logic;
@@ -9,4 +10,3 @@ pub mod put_logic;
 pub mod trend_logic;
 pub mod user_share_balance_logic;
 pub mod user_share_operations;
-pub mod balance_history_logic;

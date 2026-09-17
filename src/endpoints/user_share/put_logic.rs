@@ -204,9 +204,15 @@ pub async fn handler(
     };
 
     if let Some((op_type, op_quantity, op_price)) = operation {
-        if let Err(err) =
-            record_operation(&mut tx, user_id, position_share_id, op_type, op_quantity, op_price)
-                .await
+        if let Err(err) = record_operation(
+            &mut tx,
+            user_id,
+            position_share_id,
+            op_type,
+            op_quantity,
+            op_price,
+        )
+        .await
         {
             tracing::error!("Failed to record partial buy/sell operation: {}", err);
             return internal_error();

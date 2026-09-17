@@ -244,15 +244,12 @@ pub async fn handler(
         let ticker = row.ticker.to_uppercase();
         let created_at_ms = row.created_at.timestamp_millis();
         earliest_day = earliest_day.min(day_bucket(created_at_ms));
-        ops_by_ticker
-            .entry(ticker)
-            .or_default()
-            .push(LedgerOp {
-                is_buy: row.operation_type == "buy",
-                quantity: row.quantity,
-                price: row.price,
-                created_at_ms,
-            });
+        ops_by_ticker.entry(ticker).or_default().push(LedgerOp {
+            is_buy: row.operation_type == "buy",
+            quantity: row.quantity,
+            price: row.price,
+            created_at_ms,
+        });
     }
 
     let unique_tickers: HashSet<String> = ops_by_ticker.keys().cloned().collect();
