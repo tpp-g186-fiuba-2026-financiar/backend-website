@@ -20,7 +20,7 @@ use crate::auth::middleware::AuthUser;
 /// be ordered) — interpretation (current price, entry price for a given
 /// purchase date) lives in the pure functions below so it can be unit
 /// tested without a network call.
-async fn fetch_ticker_history(ticker: &str) -> Result<Vec<PricePoint>, PriceFetchError> {
+pub async fn fetch_ticker_history(ticker: &str) -> Result<Vec<PricePoint>, PriceFetchError> {
     let ticker = ticker.trim().to_uppercase();
     let base = std::env::var("DATA_COLLECTOR_URL")
         .unwrap_or_else(|_| "https://data-colector.onrender.com".into());

@@ -8,3 +8,5 @@ pub mod post_logic;
 pub mod put_logic;
 pub mod trend_logic;
 pub mod user_share_balance_logic;
+pub mod user_share_operations;
+pub mod balance_history_logic;

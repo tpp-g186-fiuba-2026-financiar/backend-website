@@ -23,7 +23,7 @@ use utoipa::{
     Modify, OpenApi,
 };
 
-use crate::configuration::config::AppState;
+use crate::{configuration::config::AppState, endpoints::user_share::balance_history_logic};
 use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
 use crate::endpoints::alert_subscription::get_logic::{
     self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
@@ -247,6 +247,7 @@ pub fn app_with_state(
             "/user/shares/balance",
             get(user_share_balance_logic::handler),
         )
+        .route("/user/shares/balance/history", get(balance_history_logic::handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
