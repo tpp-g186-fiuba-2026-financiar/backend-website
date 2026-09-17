@@ -18,7 +18,8 @@ pub struct UpdateRiskProfileRequest {
     responses(
         (status = 200, description = "Risk profile actualizado correctamente", example = json!({
             "id": 1,
-            "risk_profile": "moderate"
+            "risk_profile": "moderate",
+            "expires_at": "2026-11-13T12:00:00Z"
         })),
         (status = 400, description = "Valor de risk_profile inválido", example = json!({
             "code": 400,
@@ -73,22 +74,26 @@ pub async fn handler(
 
     let row = sqlx::query!(
         r#"
-        UPDATE user_investing_profiles
-        SET risk_profile = $1, created_at = NOW(), expires_at = NOW() + INTERVAL '6 months', is_active = TRUE
-        WHERE user_id = $2
-        RETURNING id, risk_profile
+        INSERT INTO user_investing_profiles (user_id, risk_profile)
+        SELECT id, $2
+        FROM users
+        WHERE id = $1
+        RETURNING id, risk_profile, expires_at
         "#,
-        payload.risk_profile,
-        auth_user.user_id
+        auth_user.user_id,
+        payload.risk_profile
     )
     .fetch_optional(&pool)
     .await;
 
     match row {
-        Ok(Some(_)) => (
+        Ok(Some(rec)) => (
             StatusCode::OK,
             Json(json!({
                 "code": 200,
+                "id": rec.id,
+                "risk_profile": rec.risk_profile,
+                "expires_at": rec.expires_at
             })),
         ),
         Ok(None) => (

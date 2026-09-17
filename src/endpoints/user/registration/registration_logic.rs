@@ -92,7 +92,6 @@ pub async fn handler(
         }
     }
 
-    // Lucas comments: this can be easily be moved to a validators, not sure still how will be implemented yet.
     if let Some(ref profile) = payload.risk_profile {
         let valid_profiles = ["conservative", "moderate", "aggressive"];
         if !valid_profiles.contains(&profile.as_str()) {
@@ -116,7 +115,7 @@ pub async fn handler(
                 "message": "User already exists for that email!"
             }));
         }
-        Ok(None) => {} // User does not exist, proceed
+        Ok(None) => {}
         Err(err) => {
             tracing::error!("Database query failed during existence check: {}", err);
             return axum::response::Json(json!({
@@ -137,9 +136,21 @@ pub async fn handler(
         }
     };
 
+    // --- 3. User + risk profile in a single transaction ---
+    let mut transaction = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start database transaction: {}", err);
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred. Please try again later."
+            }));
+        }
+    };
+
     let user_id_result = sqlx::query_scalar!(
         r#"
-        INSERT INTO users (email, password_hash, full_name) 
+        INSERT INTO users (email, password_hash, full_name)
         VALUES ($1, $2, $3)
         RETURNING id
         "#,
@@ -147,13 +158,14 @@ pub async fn handler(
         hashed_password,
         payload.full_name
     )
-    .fetch_one(&pool)
+    .fetch_one(&mut *transaction)
     .await;
 
     let user_id = match user_id_result {
         Ok(id) => id,
         Err(err) => {
             tracing::error!("Failed to insert new user: {}", err);
+            // transaction drops here -> rolled back automatically
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred while saving the user."
@@ -161,21 +173,21 @@ pub async fn handler(
         }
     };
 
-    // 2. Now insert the risk profile using the retrieved user_id
     if let Some(ref profile) = payload.risk_profile {
-        let insert_risk_profile_result = sqlx::query(
+        let insert_risk_profile_result = sqlx::query!(
             r#"
-            INSERT INTO user_investing_profiles (user_id, risk_profile, created_at, expires_at, is_active)
-            VALUES ($1, $2, NOW(), NOW() + INTERVAL '6 months', TRUE)
+            INSERT INTO user_investing_profiles (user_id, risk_profile)
+            VALUES ($1, $2)
             "#,
+            user_id,
+            profile
         )
-        .bind(user_id)
-        .bind(profile)
-        .execute(&pool)
+        .execute(&mut *transaction)
         .await;
 
         if let Err(err) = insert_risk_profile_result {
             tracing::error!("Failed to insert risk profile: {}", err);
+            // transaction drops here -> user insert is rolled back too
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred while saving the risk profile."
@@ -183,7 +195,15 @@ pub async fn handler(
         }
     }
 
-    // --- 5. Success ---
+    if let Err(err) = transaction.commit().await {
+        tracing::error!("Failed to commit registration transaction: {}", err);
+        return axum::response::Json(json!({
+            "code": 500,
+            "message": "An unexpected error occurred while saving the user."
+        }));
+    }
+
+    // --- 4. Success ---
     axum::response::Json(json!({
         "code": 200,
         "message": "User registered successfully"

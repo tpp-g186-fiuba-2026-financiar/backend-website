@@ -105,11 +105,11 @@ async fn main() {
             session_store.delete_expired().await.unwrap_or_else(|err| {
                 tracing::error!("Failed to delete expired sessions: {}", err);
             });
-            db::update_expired_investing_profiles(&pool)
-                .await
-                .unwrap_or_else(|err| {
-                    tracing::error!("Failed to update expired investing profiles: {}", err);
-                });
+            /*db::update_expired_investing_profiles(&pool)
+            .await
+            .unwrap_or_else(|err| {
+                tracing::error!("Failed to update expired investing profiles: {}", err);
+            });*/
         }
     });
     axum::serve(listener, router).await.unwrap();

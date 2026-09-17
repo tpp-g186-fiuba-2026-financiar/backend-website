@@ -64,13 +64,11 @@ pub async fn handler(
 
     let (risk_profile, has_to_redo_risk_profile) = sqlx::query!(
         r#"
-        SELECT 
-        risk_profile, 
-        (NOW() > created_at + INTERVAL '6 months') AS has_to_redo_risk_profile
+        SELECT risk_profile, (NOW() >= expires_at) AS has_to_redo_risk_profile
         FROM user_investing_profiles
-        WHERE user_id = $1 
-        ORDER BY created_at DESC 
-        LIMIT 1;
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
         "#,
         auth_user.user_id
     )
@@ -81,7 +79,7 @@ pub async fn handler(
         None
     })
     .map(|row| (row.risk_profile, row.has_to_redo_risk_profile))
-    .unwrap_or_else(|| (None, Some(false)));
+    .unwrap_or_else(|| (None, Some(true)));
 
     match row {
         Ok(Some(user)) => (
@@ -91,7 +89,7 @@ pub async fn handler(
                 "email": user.email,
                 "full_name": user.full_name,
                 "risk_profile": risk_profile,
-                "has_to_redo_risk_profile": has_to_redo_risk_profile.unwrap(), // this will be
+                "has_to_redo_risk_profile": has_to_redo_risk_profile.unwrap_or(true), // this will be
                                                                                // either true of
                                                                                // false
                 "is_active": user.is_active,

@@ -411,7 +411,7 @@ mod tests {
         .unwrap();
 
         let insert_profile_result = sqlx::query(
-            "INSERT INTO user_investing_profiles (user_id, risk_profile, created_at, expires_at, is_active) VALUES ($1, 'moderate', NOW(), NOW() + INTERVAL '6 months', TRUE)",
+            "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate')",
         )
         .bind(user_id)
         .execute(&pool)

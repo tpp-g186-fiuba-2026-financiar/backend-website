@@ -175,7 +175,7 @@ async fn setup() -> (AppState, String, String) {
     .unwrap();
 
     let user_investing_profile = sqlx::query_scalar(
-        "INSERT INTO user_investing_profiles (user_id, risk_profile, created_at, expires_at, is_active) VALUES ($1, 'moderate', NOW(), NOW() + INTERVAL '6 months', TRUE) RETURNING id",
+        "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate') RETURNING user_id",
     )
     .bind(user_id)
     .fetch_one(&pool)

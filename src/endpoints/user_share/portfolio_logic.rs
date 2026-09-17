@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::auth::middleware::AuthUser;
+use crate::auth::{middleware::AuthUser, profile::CurrentProfile};
 
 #[derive(Serialize)]
 struct TenenciaItem {
@@ -86,6 +86,7 @@ pub struct PortfolioRecomendacionResponse {
 pub async fn handler(
     State(pool): State<PgPool>,
     Extension(auth_user): Extension<AuthUser>,
+    Extension(profile): Extension<CurrentProfile>,
     Query(query): Query<PortfolioQuery>,
 ) -> impl IntoResponse {
     // Perfil de riesgo del usuario (mismo campo que expone GET /user).
@@ -99,47 +100,7 @@ pub async fn handler(
     .bind(auth_user.user_id)
     .fetch_optional(&pool)
     .await;*/
-    let risk_profile = sqlx::query_as::<_, (Option<String>,)>(
-        r#"
-        SELECT risk_profile
-        FROM user_investing_profiles
-        WHERE user_id = $1
-        ORDER BY created_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(auth_user.user_id)
-    .fetch_optional(&pool)
-    .await;
-
-    let perfil_riesgo = match risk_profile {
-        Ok(Some((Some(profile),))) => profile,
-        Ok(Some((None,))) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "code": 400,
-                    "message": "Configura tu perfil de riesgo antes de pedir una recomendacion."
-                })),
-            );
-        }
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "code": 404, "message": "User not found" })),
-            );
-        }
-        Err(err) => {
-            tracing::error!("Database query failed during risk_profile lookup: {}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "code": 500,
-                    "message": "An unexpected error occurred. Please try again later."
-                })),
-            );
-        }
-    };
+    let perfil_riesgo = profile.risk_profile.clone();
 
     // Tenencias del usuario (ticker + cantidad). Cartera vacia es valida:
     // api-ml cae a equal_weight sola si no se fuerza cartera_ancla=propia.

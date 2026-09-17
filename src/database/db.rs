@@ -6,7 +6,7 @@ pub async fn create_pool(database_url: &str) -> PgPool {
         .expect("Failed to connect to database")
 }
 
-pub async fn create_tables(pool: &PgPool) {
+/*pub async fn create_tables(pool: &PgPool) {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS users (
             id            SERIAL PRIMARY KEY,
@@ -33,11 +33,11 @@ pub async fn create_tables(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("Failed to create tables");
-}
+}*/
 
-pub async fn update_expired_investing_profiles(pool: &PgPool) -> Result<(), sqlx::Error> {
+/*pub async fn update_expired_investing_profiles(pool: &PgPool) -> Result<(), sqlx::Error> {
     let query = sqlx::query(
-        "UPDATE risk_profiles
+        "UPDATE user_investing_profiles
          SET is_active = FALSE
          WHERE expires_at <= NOW() AND is_active = TRUE",
     )
@@ -50,4 +50,4 @@ pub async fn update_expired_investing_profiles(pool: &PgPool) -> Result<(), sqlx
     }
 
     Ok(())
-}
+}*/
