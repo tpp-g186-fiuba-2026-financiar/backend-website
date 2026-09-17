@@ -75,7 +75,7 @@ pub async fn handler(
         r#"
         UPDATE user_investing_profiles
         SET risk_profile = $1, created_at = NOW(), expires_at = NOW() + INTERVAL '6 months', is_active = TRUE
-        WHERE user_id = $1
+        WHERE user_id = $2
         RETURNING id, risk_profile
         "#,
         payload.risk_profile,

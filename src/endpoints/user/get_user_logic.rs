@@ -81,7 +81,7 @@ pub async fn handler(
         None
     })
     .map(|row| (row.risk_profile, row.has_to_redo_risk_profile))
-    .unwrap_or_else(|| (None, false));
+    .unwrap_or_else(|| (None, Some(false)));
 
     match row {
         Ok(Some(user)) => (
@@ -90,8 +90,10 @@ pub async fn handler(
                 "id": user.id,
                 "email": user.email,
                 "full_name": user.full_name,
-                "risk_profile": user.risk_profile,
-                "has_to_redo_risk_profile": has_to_redo_risk_profile,
+                "risk_profile": risk_profile,
+                "has_to_redo_risk_profile": has_to_redo_risk_profile.unwrap(), // this will be
+                                                                               // either true of
+                                                                               // false
                 "is_active": user.is_active,
                 "created_at": user.created_at,
             })),
