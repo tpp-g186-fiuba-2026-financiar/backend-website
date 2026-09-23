@@ -31,6 +31,7 @@ use crate::endpoints::alert_subscription::post_logic::{
     self as alert_subscription_post_logic, AlertSubscriptionResponse,
 };
 use crate::endpoints::share::get_logic as share_get_logic;
+use crate::endpoints::share::get_sector as share_get_sector;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::delete_logic as user_delete_logic;
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
@@ -99,6 +100,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::history_logic::handler,
         endpoints::user_share::pnl_logic::handler,
         endpoints::share::get_logic::handler,
+        endpoints::share::get_sector::handler,
         endpoints::share::update_logic::handler,
         endpoints::user_share::portfolio_logic::handler,
         endpoints::alert_subscription::post_logic::subscribe_ticker,
@@ -160,6 +162,10 @@ pub fn app_with_state(
         .route("/health", get(endpoints::health::handler))
         .route("/register", post(registration_logic::handler))
         .route("/shares", get(share_get_logic::handler))
+        .route(
+            "/shares/{ticker}/sector",
+            get(share_get_sector::handler),
+        )
         .route("/shares/update", get(share_update_logic::handler));
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
