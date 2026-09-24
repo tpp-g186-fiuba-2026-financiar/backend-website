@@ -7,6 +7,7 @@ use tower_sessions::Session;
 use utoipa::ToSchema;
 
 use crate::auth::jwt::JwtConfig;
+use crate::endpoints::user::two_factor::totp::verify_code;
 
 #[derive(Deserialize, ToSchema)]
 pub struct LoginUserRequest {
@@ -14,6 +15,11 @@ pub struct LoginUserRequest {
     pub email: String,
     #[schema(example = "StrongPassword123!")]
     pub password: String,
+    /// Codigo de 6 digitos de la app autenticadora; solo se exige si el
+    /// usuario tiene 2FA activado.
+    #[schema(example = "123456")]
+    #[serde(default)]
+    pub totp_code: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -22,6 +28,8 @@ pub struct LoginUserResponse {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub two_factor_required: Option<bool>,
 }
 
 #[utoipa::path(
@@ -38,9 +46,10 @@ pub struct LoginUserResponse {
             "code": 400,
             "message": "Email and password are required"
         })),
-        (status = 401, description = "Invalid credentials", body = LoginUserResponse, example = json!({
+        (status = 401, description = "Invalid credentials, or missing/invalid 2FA code (two_factor_required = true)", body = LoginUserResponse, example = json!({
             "code": 401,
-            "message": "Invalid email or password"
+            "message": "Two-factor code required",
+            "two_factor_required": true
         })),
         (status = 500, description = "Internal server error", body = LoginUserResponse, example = json!({
             "code": 500,
@@ -64,24 +73,27 @@ pub async fn handler(
 
     let email = payload.email.trim();
 
-    let user_result = sqlx::query("SELECT password_hash, id FROM users WHERE email = $1")
-        .bind(email)
-        .fetch_optional(&pool)
-        .await;
+    let user_result = sqlx::query(
+        "SELECT password_hash, id, totp_secret, two_factor_enabled FROM users WHERE email = $1",
+    )
+    .bind(email)
+    .fetch_optional(&pool)
+    .await;
 
-    let (stored_hash, serial_id) = match user_result {
+    let (stored_hash, serial_id, totp_secret, two_factor_enabled) = match user_result {
         Ok(Some(row)) => {
-            let (password_hashed, id): (String, i32) = match sqlx::FromRow::from_row(&row) {
-                Ok(data) => data,
-                Err(err) => {
-                    tracing::error!("Failed to parse user data during login: {}", err);
-                    return axum::response::Json(json!({
-                        "code": 500,
-                        "message": "An unexpected error occurred. Please try again later."
-                    }));
-                }
-            };
-            (password_hashed, id)
+            let (password_hashed, id, secret, enabled): (String, i32, Option<String>, bool) =
+                match sqlx::FromRow::from_row(&row) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        tracing::error!("Failed to parse user data during login: {}", err);
+                        return axum::response::Json(json!({
+                            "code": 500,
+                            "message": "An unexpected error occurred. Please try again later."
+                        }));
+                    }
+                };
+            (password_hashed, id, secret, enabled)
         }
         Ok(None) => {
             return axum::response::Json(json!({
@@ -103,6 +115,28 @@ pub async fn handler(
             "code": 401,
             "message": "Invalid email or password"
         }));
+    }
+
+    if two_factor_enabled {
+        let secret = totp_secret.unwrap_or_default();
+        match payload.totp_code.as_deref().map(str::trim) {
+            None | Some("") => {
+                return axum::response::Json(json!({
+                    "code": 401,
+                    "message": "Two-factor code required",
+                    "two_factor_required": true
+                }));
+            }
+            Some(code) => {
+                if !verify_code(&secret, email, code) {
+                    return axum::response::Json(json!({
+                        "code": 401,
+                        "message": "Invalid two-factor code",
+                        "two_factor_required": true
+                    }));
+                }
+            }
+        }
     }
 
     let token = match jwt_config.encode_token(serial_id, email) {

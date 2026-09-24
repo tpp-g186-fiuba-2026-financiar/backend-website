@@ -14,6 +14,7 @@ pub struct GetUserResponse {
     pub full_name: String,
     pub risk_profile: Option<String>,
     pub is_active: bool,
+    pub two_factor_enabled: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -27,6 +28,7 @@ pub struct GetUserResponse {
             "full_name": "John Doe",
             "risk_profile": "moderate",
             "is_active": true,
+            "two_factor_enabled": false,
             "created_at": "2026-05-13T12:00:00Z"
         })),
         (status = 401, description = "Missing or invalid authentication token", example = json!({
@@ -51,7 +53,7 @@ pub async fn handler(
 ) -> impl IntoResponse {
     let row = sqlx::query!(
         r#"
-        SELECT id, email, full_name, risk_profile, is_active, created_at
+        SELECT id, email, full_name, risk_profile, is_active, two_factor_enabled, created_at
         FROM users
         WHERE id = $1
         "#,
@@ -69,6 +71,7 @@ pub async fn handler(
                 "full_name": user.full_name,
                 "risk_profile": user.risk_profile,
                 "is_active": user.is_active,
+                "two_factor_enabled": user.two_factor_enabled,
                 "created_at": user.created_at,
             })),
         ),

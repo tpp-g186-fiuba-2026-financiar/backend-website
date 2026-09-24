@@ -305,7 +305,9 @@ async fn get_shares_includes_entry_price() {
     assert_eq!(ggal["entry_price"], 1520.50);
 
     let ypfd = shares.iter().find(|s| s["ticker"] == "YPFD").unwrap();
-    assert!(ypfd["entry_price"].is_null());
+    // Sin entry_price explicito, el POST lo resuelve con el precio actual
+    // (ya no queda NULL para compras nuevas).
+    assert!(ypfd["entry_price"].is_number());
 
     cleanup_user(&state.pool, &email).await;
 }
