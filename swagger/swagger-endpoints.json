@@ -105,7 +105,7 @@
             }
           },
           "401": {
-            "description": "Invalid credentials",
+            "description": "Invalid credentials, or missing/invalid 2FA code (two_factor_required = true)",
             "content": {
               "application/json": {
                 "schema": {
@@ -113,7 +113,8 @@
                 },
                 "example": {
                   "code": 401,
-                  "message": "Invalid email or password"
+                  "message": "Two-factor code required",
+                  "two_factor_required": true
                 }
               }
             }
@@ -301,7 +302,8 @@
                   "full_name": "John Doe",
                   "id": 1,
                   "is_active": true,
-                  "risk_profile": "moderate"
+                  "risk_profile": "moderate",
+                  "two_factor_enabled": false
                 }
               }
             }
@@ -339,6 +341,98 @@
           },
           "500": {
             "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/disable": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "disable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA desactivado"
+          },
+          "400": {
+            "description": "Codigo invalido o 2FA no activado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/enable": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "enable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA activado"
+          },
+          "400": {
+            "description": "Codigo invalido o setup no iniciado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/setup": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "setup",
+        "responses": {
+          "200": {
+            "description": "Secreto generado; escanear el QR y confirmar con /user/2fa/enable"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "2FA ya esta activado"
           }
         },
         "security": [
@@ -618,6 +712,9 @@
           },
           "500": {
             "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve a current price to use as entry_price"
           }
         },
         "security": [
@@ -886,6 +983,9 @@
           },
           "500": {
             "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve a current price for the buy/sell delta"
           }
         },
         "security": [
@@ -923,6 +1023,9 @@
           },
           "500": {
             "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve the current price needed to record the sale"
           }
         },
         "security": [
@@ -1083,7 +1186,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Precio de entrada (precio pagado por accion). Opcional.",
+            "description": "Precio de entrada (precio pagado por accion). Opcional — si se\nomite, se resuelve con el precio de mercado actual en el momento\nde la creacion.",
             "example": 1520.5
           },
           "quantity": {
@@ -1142,6 +1245,7 @@
           "email",
           "full_name",
           "is_active",
+          "two_factor_enabled",
           "created_at"
         ],
         "properties": {
@@ -1167,6 +1271,9 @@
               "string",
               "null"
             ]
+          },
+          "two_factor_enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -1296,6 +1403,14 @@
           "password": {
             "type": "string",
             "example": "StrongPassword123!"
+          },
+          "totp_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Codigo de 6 digitos de la app autenticadora; solo se exige si el\nusuario tiene 2FA activado.",
+            "example": "123456"
           }
         }
       },
@@ -1317,6 +1432,12 @@
           "token": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "two_factor_required": {
+            "type": [
+              "boolean",
               "null"
             ]
           }
@@ -1719,6 +1840,18 @@
           }
         }
       },
+      "TwoFactorCodeRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "123456"
+          }
+        }
+      },
       "UpdateShareRequest": {
         "type": "object",
         "required": [
@@ -1731,7 +1864,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Precio de entrada (precio pagado por accion). Si se omite, se\nconserva el valor previamente cargado.",
+            "description": "Precio de entrada (precio pagado por accion). Solo se usa si esta\nactualizacion sube la cantidad (compra parcial); si se omite en\nese caso, se resuelve con el precio de mercado actual. Si la\nactualizacion baja la cantidad (venta parcial), este campo se\nignora: el precio de venta siempre es el de mercado actual.",
             "example": 1520.5
           },
           "quantity": {
@@ -1792,6 +1925,10 @@
     {
       "name": "Authentication",
       "description": "Endpoints for user identity management"
+    },
+    {
+      "name": "Two-Factor",
+      "description": "Endpoints for enabling and disabling TOTP two-factor authentication"
     },
     {
       "name": "User",
