@@ -207,6 +207,17 @@ async fn pnl_without_entry_price_returns_null_pnl_fields() {
     )
     .await;
 
+    // Los POST nuevos siempre resuelven un precio, asi que simulamos una
+    // tenencia legacy (anterior al ledger) con entry_price NULL.
+    sqlx::query(
+        "UPDATE user_shares SET entry_price = NULL \
+         WHERE user_id = (SELECT id FROM users WHERE email = $1)",
+    )
+    .bind(&email)
+    .execute(&state.pool)
+    .await
+    .expect("failed to null entry_price");
+
     let app = build_app(state.clone()).await;
     let (status, json) = get_pnl(app, &token).await;
 

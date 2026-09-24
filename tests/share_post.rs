@@ -269,7 +269,7 @@ async fn post_share_with_entry_price_returns_201_and_stores_it() {
 }
 
 #[tokio::test]
-async fn post_share_without_entry_price_returns_null() {
+async fn post_share_without_entry_price_resolves_current_price() {
     let state = setup().await;
     let email = unique_email("no_entry_price");
     let token = register_and_login(&state, &email, "StrongPassword123!").await;
@@ -279,7 +279,8 @@ async fn post_share_without_entry_price_returns_null() {
     let (status, json) = post_share(app, &token, json!({ "ticker": "GGAL", "quantity": 5 })).await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert!(json["entry_price"].is_null());
+    // Sin entry_price explicito se resuelve con el precio actual.
+    assert!(json["entry_price"].is_number());
 
     cleanup_user(&state.pool, &email).await;
 }
