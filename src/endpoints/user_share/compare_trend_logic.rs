@@ -9,6 +9,8 @@ use crate::auth::middleware::AuthUser;
 
 const DEFAULT_LSTM_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
 const DEFAULT_XGBOOST_URL: &str = "https://matimorales01--xgboost-trend-model-main.modal.run";
+const DEFAULT_TRANSFORMER_URL: &str =
+    "https://matimorales01--transformer-trend-model-main.modal.run";
 const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
 const DEFAULT_SVM_URL: &str = "https://matimorales01--svm-model-main.modal.run";
 const DEFAULT_GARCH_URL: &str = "https://matimorales01--garch-model-main.modal.run";
@@ -62,14 +64,17 @@ pub async fn handler(
     let lstm_url = std::env::var("MODAL_LSTM_URL").unwrap_or_else(|_| DEFAULT_LSTM_URL.into());
     let xgboost_url =
         std::env::var("MODAL_XGBOOST_URL").unwrap_or_else(|_| DEFAULT_XGBOOST_URL.into());
+    let transformer_url =
+        std::env::var("MODAL_TRANSFORMER_URL").unwrap_or_else(|_| DEFAULT_TRANSFORMER_URL.into());
     let arima_url = std::env::var("MODAL_ARIMA_URL").unwrap_or_else(|_| DEFAULT_ARIMA_URL.into());
     let svm_url = std::env::var("MODAL_SVM_URL").unwrap_or_else(|_| DEFAULT_SVM_URL.into());
     let garch_url = std::env::var("MODAL_GARCH_URL").unwrap_or_else(|_| DEFAULT_GARCH_URL.into());
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, arima, svm, garch, api_ml_models) = tokio::join!(
+    let (lstm, xgboost, transformer, arima, svm, garch, api_ml_models) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
+        fetch_modal(&client, "transformer-modal", &transformer_url, &ticker),
         fetch_arima(&client, &arima_url, &ticker),
         fetch_svm(&client, &svm_url, &ticker),
         fetch_garch(&client, &garch_url, &ticker),
@@ -84,6 +89,7 @@ pub async fn handler(
     let mut predictions = serde_json::Map::new();
     predictions.insert("lstm-modal".into(), lstm);
     predictions.insert("xgboost-modal".into(), xgboost);
+    predictions.insert("transformer-modal".into(), transformer);
     predictions.insert("arima-modal".into(), arima);
     predictions.insert("svm-modal".into(), svm);
     predictions.insert("garch-modal".into(), garch);
