@@ -38,6 +38,9 @@ use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserRespo
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
 };
+use crate::endpoints::user::two_factor::two_factor_logic::{
+    self as two_factor_logic, TwoFactorCodeRequest,
+};
 use crate::endpoints::user_share::compare_trend_logic::{
     self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
 };
@@ -90,6 +93,9 @@ impl Modify for SecurityAddon {
         endpoints::user::login_logic::handler,
         endpoints::user::get_user_logic::handler,
         endpoints::user::delete_logic::handler,
+        endpoints::user::two_factor::two_factor_logic::setup,
+        endpoints::user::two_factor::two_factor_logic::enable,
+        endpoints::user::two_factor::two_factor_logic::disable,
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
         endpoints::user_share::delete_logic::handler,
@@ -113,6 +119,7 @@ impl Modify for SecurityAddon {
             RegisterUserResponse,
             LoginUserRequest,
             LoginUserResponse,
+            TwoFactorCodeRequest,
             GetUserResponse,
             CreateShareRequest,
             CreateShareResponse,
@@ -137,6 +144,7 @@ impl Modify for SecurityAddon {
     modifiers(&SecurityAddon),
     tags(
         (name = "Authentication", description = "Endpoints for user identity management"),
+        (name = "Two-Factor", description = "Endpoints for enabling and disabling TOTP two-factor authentication"),
         (name = "User", description = "Endpoints for retrieving authenticated user information"),
         (name = "Share", description = "Endpoints for managing the authenticated user's declared stock portfolio"),
         (name = "Alerts", description = "Endpoints for subscribing to trend-change email alerts"),
@@ -207,6 +215,9 @@ pub fn app_with_state(
             "/user/risk-profile",
             patch(update_risk_profile_logic::handler),
         )
+        .route("/user/2fa/setup", post(two_factor_logic::setup))
+        .route("/user/2fa/enable", post(two_factor_logic::enable))
+        .route("/user/2fa/disable", post(two_factor_logic::disable))
         .route(
             "/user/shares",
             post(user_share_post_logic::handler).get(user_share_get_logic::handler),
