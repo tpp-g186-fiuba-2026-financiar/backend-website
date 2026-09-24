@@ -31,12 +31,16 @@ use crate::endpoints::alert_subscription::post_logic::{
     self as alert_subscription_post_logic, AlertSubscriptionResponse,
 };
 use crate::endpoints::share::get_logic as share_get_logic;
+use crate::endpoints::share::get_sector as share_get_sector;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::delete_logic as user_delete_logic;
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
+};
+use crate::endpoints::user::two_factor::two_factor_logic::{
+    self as two_factor_logic, TwoFactorCodeRequest,
 };
 use crate::endpoints::user_share::compare_trend_logic::{
     self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
@@ -62,6 +66,7 @@ use crate::endpoints::user_share::trend_logic::{
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
+use crate::{configuration::config::AppState, endpoints::user_share::balance_history_logic};
 use crate::{auth::profile::require_profile, configuration::config::AppState};
 
 pub struct SecurityAddon;
@@ -90,6 +95,9 @@ impl Modify for SecurityAddon {
         endpoints::user::login_logic::handler,
         endpoints::user::get_user_logic::handler,
         endpoints::user::delete_logic::handler,
+        endpoints::user::two_factor::two_factor_logic::setup,
+        endpoints::user::two_factor::two_factor_logic::enable,
+        endpoints::user::two_factor::two_factor_logic::disable,
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
         endpoints::user_share::delete_logic::handler,
@@ -99,6 +107,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::history_logic::handler,
         endpoints::user_share::pnl_logic::handler,
         endpoints::share::get_logic::handler,
+        endpoints::share::get_sector::handler,
         endpoints::share::update_logic::handler,
         endpoints::user_share::portfolio_logic::handler,
         endpoints::alert_subscription::post_logic::subscribe_ticker,
@@ -113,6 +122,7 @@ impl Modify for SecurityAddon {
             RegisterUserResponse,
             LoginUserRequest,
             LoginUserResponse,
+            TwoFactorCodeRequest,
             GetUserResponse,
             CreateShareRequest,
             CreateShareResponse,
@@ -137,6 +147,7 @@ impl Modify for SecurityAddon {
     modifiers(&SecurityAddon),
     tags(
         (name = "Authentication", description = "Endpoints for user identity management"),
+        (name = "Two-Factor", description = "Endpoints for enabling and disabling TOTP two-factor authentication"),
         (name = "User", description = "Endpoints for retrieving authenticated user information"),
         (name = "Share", description = "Endpoints for managing the authenticated user's declared stock portfolio"),
         (name = "Alerts", description = "Endpoints for subscribing to trend-change email alerts"),
@@ -160,6 +171,10 @@ pub fn app_with_state(
         .route("/health", get(endpoints::health::handler))
         .route("/register", post(registration_logic::handler))
         .route("/shares", get(share_get_logic::handler))
+        .route(
+            "/shares/{ticker}/sector",
+            get(share_get_sector::handler),
+        )
         .route("/shares/update", get(share_update_logic::handler));
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
@@ -207,6 +222,9 @@ pub fn app_with_state(
             "/user/risk-profile",
             patch(update_risk_profile_logic::handler),
         )
+        .route("/user/2fa/setup", post(two_factor_logic::setup))
+        .route("/user/2fa/enable", post(two_factor_logic::enable))
+        .route("/user/2fa/disable", post(two_factor_logic::disable))
         .route(
             "/user/shares",
             post(user_share_post_logic::handler).get(user_share_get_logic::handler),
@@ -249,6 +267,10 @@ pub fn app_with_state(
         .route(
             "/user/shares/balance",
             get(user_share_balance_logic::handler),
+        )
+        .route(
+            "/user/shares/balance/history",
+            get(balance_history_logic::handler),
         )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

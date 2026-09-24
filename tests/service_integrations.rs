@@ -137,6 +137,7 @@ async fn start_stub() -> (String, StubState) {
     let state = StubState::default();
     let app = Router::new()
         .route("/historical-data/{ticker}", post(historical))
+        .route("/share/sector/{ticker}", get(sector))
         .route("/available-tickers", post(available))
         .route("/model-ready-tickers", post(ready))
         .route("/lstm", get(trend_model))
