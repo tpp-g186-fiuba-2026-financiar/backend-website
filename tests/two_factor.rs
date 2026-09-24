@@ -229,3 +229,75 @@ async fn two_factor_full_flow() {
         .execute(&pool)
         .await;
 }
+
+#[tokio::test]
+async fn disable_without_2fa_enabled_returns_400() {
+    let (app, pool) = build_app().await;
+    let email = unique_email();
+    let token = register_and_login(&app, &email).await;
+
+    let (status, body) = post(
+        &app,
+        "/user/2fa/disable",
+        Some(&token),
+        json!({ "code": "123456" }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["message"], "Two-factor authentication is not enabled");
+    let _ = sqlx::query("DELETE FROM users WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await;
+}
+
+#[tokio::test]
+async fn two_factor_endpoints_return_404_when_user_no_longer_exists() {
+    let (app, pool) = build_app().await;
+    let email = unique_email();
+    let token = register_and_login(&app, &email).await;
+    sqlx::query("DELETE FROM users WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    for uri in ["/user/2fa/setup", "/user/2fa/enable", "/user/2fa/disable"] {
+        let (status, body) = post(&app, uri, Some(&token), json!({ "code": "123456" })).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+        assert_eq!(body["message"], "User not found");
+    }
+}
+
+#[tokio::test]
+async fn login_with_2fa_and_blank_code_asks_for_it() {
+    let (app, pool) = build_app().await;
+    let email = unique_email();
+    let token = register_and_login(&app, &email).await;
+    let (_, setup) = post(&app, "/user/2fa/setup", Some(&token), json!({})).await;
+    let secret = setup["secret"].as_str().unwrap().to_string();
+    let code = totp::current_code(&secret, &email).unwrap();
+    post(
+        &app,
+        "/user/2fa/enable",
+        Some(&token),
+        json!({ "code": code }),
+    )
+    .await;
+
+    let (_, body) = post(
+        &app,
+        "/login",
+        None,
+        json!({ "email": email, "password": PASSWORD, "totp_code": "   " }),
+    )
+    .await;
+
+    assert_eq!(body["code"], 401);
+    assert_eq!(body["message"], "Two-factor code required");
+    let _ = sqlx::query("DELETE FROM users WHERE email = $1")
+        .bind(&email)
+        .execute(&pool)
+        .await;
+}
