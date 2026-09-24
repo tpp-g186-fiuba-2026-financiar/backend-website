@@ -14,7 +14,6 @@ use backend_website::{app_with_state, auth::jwt::JwtConfig, configuration::confi
 use dotenvy::dotenv;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
-use tokio::sync::OnceCell;
 use tower::ServiceExt;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
@@ -22,7 +21,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 const DAY_MS: i64 = 86_400_000;
 const PRICE: f64 = 120.0;
 
-static STUB: OnceCell<()> = OnceCell::const_new();
+static STUB: std::sync::Once = std::sync::Once::new();
 
 // Tickers que empiezan con BAD responden 400; el resto devuelve un precio
 // fijo (PRICE) para cada uno de los ultimos 40 dias, a las 00:00 UTC.
@@ -43,20 +42,29 @@ async fn history_stub(Path(ticker): Path<String>) -> axum::response::Response {
     Json(json!({ "data": data })).into_response()
 }
 
-async fn start_stub() {
-    STUB.get_or_init(|| async {
-        let app = Router::new().route("/historical-data/{ticker}", post(history_stub));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+// Cada #[tokio::test] tiene su propio runtime y lo destruye al terminar, asi
+// que el stub no puede colgar del runtime del primer test: vive en un hilo
+// propio, con su runtime, durante todo el proceso.
+fn start_stub() {
+    STUB.call_once(|| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            runtime.block_on(async {
+                let app = Router::new().route("/historical-data/{ticker}", post(history_stub));
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                tx.send(listener.local_addr().unwrap()).unwrap();
+                axum::serve(listener, app).await.unwrap();
+            });
+        });
+        let address = rx.recv().unwrap();
         std::env::set_var("DATA_COLLECTOR_URL", format!("http://{address}"));
-    })
-    .await;
+    });
 }
 
 async fn setup() -> AppState {
     dotenv().ok();
-    start_stub().await;
+    start_stub();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let pool = sqlx::PgPool::connect(&database_url)
         .await
