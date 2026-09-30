@@ -282,3 +282,34 @@ async fn pnl_with_entry_price_computes_consistent_amounts() {
 
     cleanup_user(&state.pool, &email).await;
 }
+
+#[tokio::test]
+async fn pnl_items_expose_weight_percentage_field() {
+    let state = setup().await;
+    let email = unique_email("weights");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+
+    create_share(
+        &state.pool,
+        build_app(state.clone()).await,
+        &token,
+        "GGAL",
+        10,
+        Some(1.0),
+    )
+    .await;
+
+    let app = build_app(state.clone()).await;
+    let (status, json) = get_pnl(app, &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let share = &json["shares"][0];
+    // El calculo se cubre con tests unitarios; aca solo el contrato: el campo
+    // existe y es null o un porcentaje valido (depende del precio de data-colector).
+    assert!(share.get("weight_percentage").is_some());
+    if let Some(weight) = share["weight_percentage"].as_f64() {
+        assert!((weight - 100.0).abs() < 1e-9, "unica tenencia pesa 100");
+    }
+
+    cleanup_user(&state.pool, &email).await;
+}
