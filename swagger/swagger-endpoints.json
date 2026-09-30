@@ -282,6 +282,33 @@
         }
       }
     },
+    "/shares/{ticker}/sector": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker de la accion (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sector de la accion obtenido de data-collector"
+          },
+          "502": {
+            "description": "data-collector no pudo responder"
+          }
+        }
+      }
+    },
     "/user": {
       "get": {
         "tags": [
@@ -753,7 +780,8 @@
                       "pnl_amount": 3000.0,
                       "pnl_percentage": 20.0,
                       "quantity": 10,
-                      "ticker": "GGAL"
+                      "ticker": "GGAL",
+                      "weight_percentage": 66.67
                     },
                     {
                       "current_price": 900.0,
@@ -762,7 +790,8 @@
                       "pnl_amount": null,
                       "pnl_percentage": null,
                       "quantity": 5,
-                      "ticker": "YPFD"
+                      "ticker": "YPFD",
+                      "weight_percentage": 33.33
                     }
                   ]
                 }
@@ -1734,6 +1763,14 @@
           },
           "ticker": {
             "type": "string"
+          },
+          "weight_percentage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Peso de la tenencia sobre el valor de mercado de la cartera (0-100).\nNull si no hay precio actual para el ticker."
           }
         }
       },
