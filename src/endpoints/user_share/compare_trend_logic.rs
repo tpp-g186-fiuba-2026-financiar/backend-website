@@ -108,8 +108,21 @@ pub async fn handler(
     )
 }
 
+/// Casos "virtuales" al 50% que se le suman a cada accuracy: con pocas
+/// observaciones el numero se acerca al azar, asi un 90% sobre 30 casos no
+/// le gana a un 65% sobre 500 solo por tener suerte en una ventana chica.
+const ACCURACY_PRIOR_CASES: f64 = 50.0;
+
+/// Accuracy ajustada por cantidad de casos. Sin `observations` no se ajusta.
+fn shrunk_accuracy(accuracy: f64, observations: Option<f64>) -> f64 {
+    match observations {
+        Some(n) if n > 0.0 => 0.5 + (accuracy - 0.5) * n / (n + ACCURACY_PRIOR_CASES),
+        _ => accuracy,
+    }
+}
+
 /// Elige, entre los modelos con backtest, el de mejor accuracy direccional
-/// para este ticker puntual. El "default" ya no es un modelo fijo (antes
+/// (ajustada por cantidad de casos) para este ticker puntual. El "default" ya no es un modelo fijo (antes
 /// siempre "lstm-modal"): cada ticker puede tener un ganador distinto segun
 /// como le fue prediciendolo. Si ninguno trae metricas todavia (Modal no
 /// respondio, poca historia), se cae al default historico.
@@ -118,11 +131,12 @@ fn pick_best_model(predictions: &serde_json::Map<String, Value>) -> String {
         .iter()
         .filter(|(_, value)| value.get("available").and_then(Value::as_bool) == Some(true))
         .filter_map(|(name, value)| {
-            let accuracy = value
-                .get("backtest")
-                .and_then(|backtest| backtest.get("directional_accuracy"))
+            let backtest = value.get("backtest")?;
+            let accuracy = backtest
+                .get("directional_accuracy")
                 .and_then(Value::as_f64)?;
-            Some((name, accuracy))
+            let observations = backtest.get("observations").and_then(Value::as_f64);
+            Some((name, shrunk_accuracy(accuracy, observations)))
         })
         .max_by(|(_, left), (_, right)| left.total_cmp(right))
         .map(|(name, _)| name.clone())
@@ -452,6 +466,37 @@ mod pick_best_model_tests {
             (
                 "xgboost-modal",
                 json!({"available": true, "backtest": {"directional_accuracy": 0.8}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn small_samples_do_not_beat_solid_ones() {
+        // 70% sobre 20 casos vs 62% sobre 600: gana el que tiene evidencia.
+        let predictions = predictions(&[
+            (
+                "arima-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.7, "observations": 20}}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.62, "observations": 600}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn same_sample_size_still_prefers_higher_accuracy() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.55, "observations": 24}}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.6, "observations": 24}}),
             ),
         ]);
         assert_eq!(pick_best_model(&predictions), "xgboost-modal");
