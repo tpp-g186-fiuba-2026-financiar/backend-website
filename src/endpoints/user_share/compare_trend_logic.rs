@@ -9,6 +9,8 @@ use crate::auth::middleware::AuthUser;
 
 const DEFAULT_LSTM_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
 const DEFAULT_XGBOOST_URL: &str = "https://matimorales01--xgboost-trend-model-main.modal.run";
+const DEFAULT_TRANSFORMER_URL: &str =
+    "https://matimorales01--transformer-trend-model-main.modal.run";
 const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
 const DEFAULT_SVM_URL: &str = "https://matimorales01--svm-model-main.modal.run";
 const DEFAULT_GARCH_URL: &str = "https://matimorales01--garch-model-main.modal.run";
@@ -62,14 +64,17 @@ pub async fn handler(
     let lstm_url = std::env::var("MODAL_LSTM_URL").unwrap_or_else(|_| DEFAULT_LSTM_URL.into());
     let xgboost_url =
         std::env::var("MODAL_XGBOOST_URL").unwrap_or_else(|_| DEFAULT_XGBOOST_URL.into());
+    let transformer_url =
+        std::env::var("MODAL_TRANSFORMER_URL").unwrap_or_else(|_| DEFAULT_TRANSFORMER_URL.into());
     let arima_url = std::env::var("MODAL_ARIMA_URL").unwrap_or_else(|_| DEFAULT_ARIMA_URL.into());
     let svm_url = std::env::var("MODAL_SVM_URL").unwrap_or_else(|_| DEFAULT_SVM_URL.into());
     let garch_url = std::env::var("MODAL_GARCH_URL").unwrap_or_else(|_| DEFAULT_GARCH_URL.into());
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, arima, svm, garch, api_ml_models) = tokio::join!(
+    let (lstm, xgboost, transformer, arima, svm, garch, api_ml_models) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
+        fetch_modal(&client, "transformer-modal", &transformer_url, &ticker),
         fetch_arima(&client, &arima_url, &ticker),
         fetch_svm(&client, &svm_url, &ticker),
         fetch_garch(&client, &garch_url, &ticker),
@@ -84,6 +89,7 @@ pub async fn handler(
     let mut predictions = serde_json::Map::new();
     predictions.insert("lstm-modal".into(), lstm);
     predictions.insert("xgboost-modal".into(), xgboost);
+    predictions.insert("transformer-modal".into(), transformer);
     predictions.insert("arima-modal".into(), arima);
     predictions.insert("svm-modal".into(), svm);
     predictions.insert("garch-modal".into(), garch);
@@ -102,8 +108,21 @@ pub async fn handler(
     )
 }
 
+/// Casos "virtuales" al 50% que se le suman a cada accuracy: con pocas
+/// observaciones el numero se acerca al azar, asi un 90% sobre 30 casos no
+/// le gana a un 65% sobre 500 solo por tener suerte en una ventana chica.
+const ACCURACY_PRIOR_CASES: f64 = 50.0;
+
+/// Accuracy ajustada por cantidad de casos. Sin `observations` no se ajusta.
+fn shrunk_accuracy(accuracy: f64, observations: Option<f64>) -> f64 {
+    match observations {
+        Some(n) if n > 0.0 => 0.5 + (accuracy - 0.5) * n / (n + ACCURACY_PRIOR_CASES),
+        _ => accuracy,
+    }
+}
+
 /// Elige, entre los modelos con backtest, el de mejor accuracy direccional
-/// para este ticker puntual. El "default" ya no es un modelo fijo (antes
+/// (ajustada por cantidad de casos) para este ticker puntual. El "default" ya no es un modelo fijo (antes
 /// siempre "lstm-modal"): cada ticker puede tener un ganador distinto segun
 /// como le fue prediciendolo. Si ninguno trae metricas todavia (Modal no
 /// respondio, poca historia), se cae al default historico.
@@ -112,11 +131,12 @@ fn pick_best_model(predictions: &serde_json::Map<String, Value>) -> String {
         .iter()
         .filter(|(_, value)| value.get("available").and_then(Value::as_bool) == Some(true))
         .filter_map(|(name, value)| {
-            let accuracy = value
-                .get("backtest")
-                .and_then(|backtest| backtest.get("directional_accuracy"))
+            let backtest = value.get("backtest")?;
+            let accuracy = backtest
+                .get("directional_accuracy")
                 .and_then(Value::as_f64)?;
-            Some((name, accuracy))
+            let observations = backtest.get("observations").and_then(Value::as_f64);
+            Some((name, shrunk_accuracy(accuracy, observations)))
         })
         .max_by(|(_, left), (_, right)| left.total_cmp(right))
         .map(|(name, _)| name.clone())
@@ -446,6 +466,37 @@ mod pick_best_model_tests {
             (
                 "xgboost-modal",
                 json!({"available": true, "backtest": {"directional_accuracy": 0.8}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn small_samples_do_not_beat_solid_ones() {
+        // 70% sobre 20 casos vs 62% sobre 600: gana el que tiene evidencia.
+        let predictions = predictions(&[
+            (
+                "arima-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.7, "observations": 20}}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.62, "observations": 600}}),
+            ),
+        ]);
+        assert_eq!(pick_best_model(&predictions), "xgboost-modal");
+    }
+
+    #[test]
+    fn same_sample_size_still_prefers_higher_accuracy() {
+        let predictions = predictions(&[
+            (
+                "lstm-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.55, "observations": 24}}),
+            ),
+            (
+                "xgboost-modal",
+                json!({"available": true, "backtest": {"directional_accuracy": 0.6, "observations": 24}}),
             ),
         ]);
         assert_eq!(pick_best_model(&predictions), "xgboost-modal");

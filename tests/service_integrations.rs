@@ -50,6 +50,10 @@ async fn available(State(state): State<StubState>) -> impl IntoResponse {
     }
 }
 
+async fn sector(Path(ticker): Path<String>) -> Json<Value> {
+    Json(json!({"ticker": ticker, "sector": "Financials"}))
+}
+
 async fn ready() -> Json<Value> {
     Json(json!({"message": {"tickers": ["COVR"]}}))
 }
@@ -78,7 +82,7 @@ async fn xgboost_model() -> Json<Value> {
         "predicted_close": 100.5,
         "as_of": "2026-09-17",
         "model_version": "coverage-v1",
-        "backtest": {"directional_accuracy": 0.65}
+        "backtest": {"directional_accuracy": 0.65, "observations": 12}
     }))
 }
 
@@ -90,7 +94,7 @@ async fn arima_model() -> Json<Value> {
         "rsi": 51.0,
         "as_of": "2026-09-17",
         "model_version": "coverage-v1",
-        "backtest": {"directional_accuracy": 0.7}
+        "backtest": {"directional_accuracy": 0.7, "observations": 12}
     }))
 }
 
@@ -98,7 +102,7 @@ async fn svm_model() -> Json<Value> {
     Json(json!({
         "prediction": "Buy",
         "model_version": "coverage-v1",
-        "backtest": {"directional_accuracy": 0.75}
+        "backtest": {"directional_accuracy": 0.75, "observations": 12}
     }))
 }
 
@@ -113,9 +117,9 @@ async fn garch_model() -> Json<Value> {
 async fn local_models(Path(_ticker): Path<String>) -> Json<Value> {
     Json(json!({
         "predictions": {
-            "lstm": {"signal": "alza", "backtest": {"directional_accuracy": 0.6}},
+            "lstm": {"signal": "alza", "backtest": {"directional_accuracy": 0.6, "observations": 12}},
             "xgboost": {"available": false, "reason": "sin artefacto"},
-            "transformer": {"signal": "neutral", "backtest": {"directional_accuracy": 0.5}}
+            "transformer": {"signal": "neutral", "backtest": {"directional_accuracy": 0.5, "observations": 12}}
         }
     }))
 }
@@ -137,7 +141,7 @@ async fn start_stub() -> (String, StubState) {
     let state = StubState::default();
     let app = Router::new()
         .route("/historical-data/{ticker}", post(historical))
-        .route("/share/sector/{ticker}", get(sector))
+        .route("/ticker/sector/{ticker}", get(sector))
         .route("/available-tickers", post(available))
         .route("/model-ready-tickers", post(ready))
         .route("/lstm", get(trend_model))

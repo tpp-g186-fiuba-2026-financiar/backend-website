@@ -18,6 +18,9 @@ pub struct SharePnlItem {
     pub current_price: Option<f64>,
     pub pnl_amount: Option<f64>,
     pub pnl_percentage: Option<f64>,
+    /// Peso de la tenencia sobre el valor de mercado de la cartera (0-100).
+    /// Null si no hay precio actual para el ticker.
+    pub weight_percentage: Option<f64>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -47,7 +50,8 @@ pub struct PnlResponse {
                     "entry_price": 1500.0,
                     "current_price": 1800.0,
                     "pnl_amount": 3000.0,
-                    "pnl_percentage": 20.0
+                    "pnl_percentage": 20.0,
+                    "weight_percentage": 66.67
                 },
                 {
                     "id": 2,
@@ -56,7 +60,8 @@ pub struct PnlResponse {
                     "entry_price": null,
                     "current_price": 900.0,
                     "pnl_amount": null,
-                    "pnl_percentage": null
+                    "pnl_percentage": null,
+                    "weight_percentage": 33.33
                 }
             ],
             "portfolio": {
@@ -140,7 +145,15 @@ pub async fn handler(
     let mut total_pnl_amount = 0.0;
     let mut items = Vec::with_capacity(shares.len());
 
-    for (id, ticker, quantity, entry_price, current_price) in shares {
+    let positions: Vec<(i32, Option<f64>)> = shares
+        .iter()
+        .map(|(_, _, quantity, _, current)| (*quantity, *current))
+        .collect();
+    let weights = compute_weights(&positions);
+
+    for ((id, ticker, quantity, entry_price, current_price), weight_percentage) in
+        shares.into_iter().zip(weights)
+    {
         // El P&L agregado solo suma tenencias con precio de entrada y precio
         // actual resueltos, para no mezclar valores parciales en el total.
         let pnl_amount = match (entry_price, current_price) {
@@ -168,6 +181,7 @@ pub async fn handler(
             current_price,
             pnl_amount,
             pnl_percentage,
+            weight_percentage,
         });
     }
 
@@ -189,6 +203,23 @@ pub async fn handler(
             },
         })),
     )
+}
+
+/// Peso (0-100) de cada tenencia sobre el valor de mercado total. Usa toda
+/// tenencia con precio actual, aunque no tenga precio de entrada (a diferencia
+/// del P&L). Sin precio, o con valor total 0, el peso es `None`.
+fn compute_weights(positions: &[(i32, Option<f64>)]) -> Vec<Option<f64>> {
+    let total: f64 = positions
+        .iter()
+        .filter_map(|(quantity, price)| price.map(|p| p * f64::from(*quantity)))
+        .sum();
+    positions
+        .iter()
+        .map(|(quantity, price)| match price {
+            Some(p) if total > 0.0 => Some(p * f64::from(*quantity) / total * 100.0),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Ultimo cierre disponible en data-colector para el ticker, usado como proxy
@@ -249,4 +280,42 @@ async fn fetch_current_price(
         })
         .max_by_key(|(ts, _)| *ts)
         .map(|(_, close)| close)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_weights;
+
+    #[test]
+    fn weights_are_proportional_to_market_value() {
+        // 10 x 30 = 300 y 5 x 40 = 200 -> 60% / 40%.
+        let w = compute_weights(&[(10, Some(30.0)), (5, Some(40.0))]);
+        assert!((w[0].unwrap() - 60.0).abs() < 1e-9);
+        assert!((w[1].unwrap() - 40.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn weights_sum_to_100() {
+        let w = compute_weights(&[(3, Some(7.3)), (11, Some(1.9)), (2, Some(250.0))]);
+        let sum: f64 = w.iter().map(|x| x.unwrap()).sum();
+        assert!((sum - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn single_position_weighs_100() {
+        assert_eq!(compute_weights(&[(4, Some(12.0))]), vec![Some(100.0)]);
+    }
+
+    #[test]
+    fn unpriced_position_has_no_weight_and_is_excluded_from_total() {
+        let w = compute_weights(&[(10, Some(10.0)), (5, None)]);
+        assert_eq!(w, vec![Some(100.0), None]);
+    }
+
+    #[test]
+    fn empty_or_zero_value_portfolio_has_no_weights() {
+        assert!(compute_weights(&[]).is_empty());
+        assert_eq!(compute_weights(&[(5, None)]), vec![None]);
+        assert_eq!(compute_weights(&[(5, Some(0.0))]), vec![None]);
+    }
 }

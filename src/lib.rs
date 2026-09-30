@@ -171,10 +171,7 @@ pub fn app_with_state(
         .route("/health", get(endpoints::health::handler))
         .route("/register", post(registration_logic::handler))
         .route("/shares", get(share_get_logic::handler))
-        .route(
-            "/shares/{ticker}/sector",
-            get(share_get_sector::handler),
-        )
+        .route("/shares/{ticker}/sector", get(share_get_sector::handler))
         .route("/shares/update", get(share_update_logic::handler));
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
