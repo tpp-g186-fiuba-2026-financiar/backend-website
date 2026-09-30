@@ -50,6 +50,10 @@ async fn available(State(state): State<StubState>) -> impl IntoResponse {
     }
 }
 
+async fn sector(Path(ticker): Path<String>) -> Json<Value> {
+    Json(json!({"ticker": ticker, "sector": "Financials"}))
+}
+
 async fn ready() -> Json<Value> {
     Json(json!({"message": {"tickers": ["COVR"]}}))
 }
@@ -137,7 +141,7 @@ async fn start_stub() -> (String, StubState) {
     let state = StubState::default();
     let app = Router::new()
         .route("/historical-data/{ticker}", post(historical))
-        .route("/share/sector/{ticker}", get(sector))
+        .route("/ticker/sector/{ticker}", get(sector))
         .route("/available-tickers", post(available))
         .route("/model-ready-tickers", post(ready))
         .route("/lstm", get(trend_model))
