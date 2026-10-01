@@ -183,7 +183,7 @@ async fn setup() -> (AppState, String, String) {
         "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate')",
     )
     .bind(user_id)
-    .fetch_one(&pool)
+    .execute(&pool)
     .await
     .unwrap();
 
