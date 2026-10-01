@@ -122,8 +122,9 @@ async fn portfolio_recomendacion_without_token_returns_401() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+// It makes sense now that we throw error if there is no risk profile return a 403 error.
 #[tokio::test]
-async fn portfolio_recomendacion_without_risk_profile_returns_400() {
+async fn portfolio_recomendacion_without_risk_profile_returns_403() {
     let state = setup().await;
     let email = unique_email("norisk");
     let token = register_and_login(&state, &email, "StrongPassword123!", None).await;
@@ -143,7 +144,7 @@ async fn portfolio_recomendacion_without_risk_profile_returns_400() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["code"], 400);
+    assert_eq!(json["code"], 403);
 
     cleanup(&state.pool, &email).await;
 }
