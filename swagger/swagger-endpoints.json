@@ -1182,6 +1182,9 @@
               "null"
             ]
           },
+          "consensus": {
+            "description": "Lectura unica (sobrecompra/sobreventa/neutral) de `api-ml`, ajustada al\nperfil de riesgo del usuario, con su historial de aciertos en paper\ntrading (`track_record`). Null si `api-ml` no respondio."
+          },
           "default_model": {
             "type": [
               "string",
