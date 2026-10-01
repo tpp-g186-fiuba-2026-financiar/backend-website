@@ -67,7 +67,7 @@ use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
 use crate::{auth::profile::require_profile, configuration::config::AppState};
-use crate::{configuration::config::AppState, endpoints::user_share::balance_history_logic};
+use crate::endpoints::user_share::balance_history_logic;
 
 pub struct SecurityAddon;
 
