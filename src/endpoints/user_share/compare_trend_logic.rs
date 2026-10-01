@@ -1,8 +1,14 @@
 use std::{collections::HashMap, time::Duration};
 
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Extension, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Extension, Json,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
@@ -38,6 +44,10 @@ pub struct CompareTrendsResponse {
     pub as_of: Option<String>,
     pub default_model: Option<String>,
     pub predictions: HashMap<String, ModelPredictionItem>,
+    /// Lectura unica (sobrecompra/sobreventa/neutral) de `api-ml`, ajustada al
+    /// perfil de riesgo del usuario, con su historial de aciertos en paper
+    /// trading (`track_record`). Null si `api-ml` no respondio.
+    pub consensus: Option<Value>,
 }
 
 #[utoipa::path(
@@ -53,10 +63,12 @@ pub struct CompareTrendsResponse {
     tag = "Share"
 )]
 pub async fn handler(
-    Extension(_auth_user): Extension<AuthUser>,
+    State(pool): State<PgPool>,
+    Extension(auth_user): Extension<AuthUser>,
     Path(ticker): Path<String>,
 ) -> impl IntoResponse {
     let ticker = ticker.trim().to_uppercase();
+    let risk_profile = user_risk_profile(&pool, auth_user.user_id).await;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -71,7 +83,7 @@ pub async fn handler(
     let garch_url = std::env::var("MODAL_GARCH_URL").unwrap_or_else(|_| DEFAULT_GARCH_URL.into());
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, transformer, arima, svm, garch, api_ml_models) = tokio::join!(
+    let (lstm, xgboost, transformer, arima, svm, garch, api_ml_models, consensus) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
         fetch_modal(&client, "transformer-modal", &transformer_url, &ticker),
@@ -79,6 +91,7 @@ pub async fn handler(
         fetch_svm(&client, &svm_url, &ticker),
         fetch_garch(&client, &garch_url, &ticker),
         fetch_api_ml_local_models(&client, api_ml_url.as_deref(), &ticker),
+        fetch_consensus(&client, api_ml_url.as_deref(), &ticker, &risk_profile),
     );
 
     let as_of = lstm
@@ -103,9 +116,72 @@ pub async fn handler(
             "symbol": ticker,
             "as_of": as_of,
             "default_model": default_model,
-            "predictions": predictions
+            "predictions": predictions,
+            "consensus": consensus
         })),
     )
+}
+
+const DEFAULT_RISK_PROFILE: &str = "moderate";
+
+/// Perfil de riesgo del usuario (`conservative` | `moderate` | `aggressive`).
+/// Si todavia no lo configuro, o la consulta falla, se usa el moderado: el
+/// consenso es informativo y no debe romper la pantalla por esto.
+async fn user_risk_profile(pool: &PgPool, user_id: i32) -> String {
+    sqlx::query_as::<_, (Option<String>,)>("SELECT risk_profile FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|(profile,)| profile)
+        .unwrap_or_else(|| DEFAULT_RISK_PROFILE.to_string())
+}
+
+fn consensus_url(api_ml_url: &str, ticker: &str, risk_profile: &str) -> String {
+    format!(
+        "{}/predict/trend/consensus/{}?profile={}",
+        api_ml_url.trim_end_matches('/'),
+        ticker,
+        risk_profile
+    )
+}
+
+/// Consenso entre modelos de `api-ml` para este ticker y perfil. Best-effort:
+/// si `api-ml` no esta configurado o falla devuelve `null` y el resto de la
+/// comparacion sigue funcionando.
+async fn fetch_consensus(
+    client: &reqwest::Client,
+    api_ml_url: Option<&str>,
+    ticker: &str,
+    risk_profile: &str,
+) -> Value {
+    let Some(api_ml_url) = api_ml_url else {
+        return Value::Null;
+    };
+    let url = consensus_url(api_ml_url, ticker, risk_profile);
+    match client.get(&url).send().await {
+        Ok(response) if response.status().is_success() => {
+            response.json::<Value>().await.unwrap_or_else(|error| {
+                tracing::error!(
+                    "Respuesta invalida de api-ml al pedir el consenso: {}",
+                    error
+                );
+                Value::Null
+            })
+        }
+        Ok(response) => {
+            tracing::warn!(
+                "api-ml respondio {} al pedir el consenso",
+                response.status()
+            );
+            Value::Null
+        }
+        Err(error) => {
+            tracing::error!("No se pudo contactar a api-ml para el consenso: {}", error);
+            Value::Null
+        }
+    }
 }
 
 /// Casos "virtuales" al 50% que se le suman a cada accuracy: con pocas
@@ -558,6 +634,19 @@ mod pick_best_model_tests {
             ("arima-modal", json!({"available": false, "reason": "..."})),
         ]);
         assert_eq!(pick_best_model(&predictions), "lstm-modal");
+    }
+}
+
+#[cfg(test)]
+mod consensus_url_tests {
+    use super::consensus_url;
+
+    #[test]
+    fn builds_url_with_profile_and_trims_trailing_slash() {
+        assert_eq!(
+            consensus_url("http://localhost:8001/", "GGAL", "aggressive"),
+            "http://localhost:8001/predict/trend/consensus/GGAL?profile=aggressive"
+        );
     }
 }
 
