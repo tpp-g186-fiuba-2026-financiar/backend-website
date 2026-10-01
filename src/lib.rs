@@ -24,9 +24,6 @@ use utoipa::{
 };
 
 use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
-use crate::endpoints::alert_subscription::get_logic::{
-    self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
-};
 use crate::endpoints::alert_subscription::post_logic::{
     self as alert_subscription_post_logic, AlertSubscriptionResponse,
 };
@@ -62,6 +59,12 @@ use crate::endpoints::user_share::put_logic::{
 };
 use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
+};
+use crate::endpoints::{
+    alert_subscription::get_logic::{
+        self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
+    },
+    user_share::user_shares_backfill,
 };
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
@@ -171,7 +174,11 @@ pub fn app_with_state(
         .route("/register", post(registration_logic::handler))
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/{ticker}/sector", get(share_get_sector::handler))
-        .route("/shares/update", get(share_update_logic::handler));
+        .route("/shares/update", get(share_update_logic::handler))
+        .route(
+            "/admin/user-shares/backfill",
+            post(user_shares_backfill::backfill_user_shares_handler),
+        );
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
     // (tarjetas anonimas a proposito), protegido por un PIN compartido
