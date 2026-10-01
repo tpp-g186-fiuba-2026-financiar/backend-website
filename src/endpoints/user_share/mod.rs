@@ -10,3 +10,4 @@ pub mod put_logic;
 pub mod trend_logic;
 pub mod user_share_balance_logic;
 pub mod user_share_operations;
+pub mod user_shares_backfill;
