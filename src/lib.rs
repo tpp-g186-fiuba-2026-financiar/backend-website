@@ -39,6 +39,7 @@ use crate::endpoints::user::registration::registration_logic::{
 use crate::endpoints::user::two_factor::two_factor_logic::{
     self as two_factor_logic, TwoFactorCodeRequest,
 };
+use crate::endpoints::user_share::balance_history_logic;
 use crate::endpoints::user_share::compare_trend_logic::{
     self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
 };
@@ -69,7 +70,7 @@ use crate::endpoints::{
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
-use crate::{configuration::config::AppState, endpoints::user_share::balance_history_logic};
+use crate::{auth::profile::require_profile, configuration::config::AppState};
 
 pub struct SecurityAddon;
 
@@ -215,8 +216,8 @@ pub fn app_with_state(
             get(endpoints::retro::archive_logic::get_one),
         );
 
-    // Rutas protegidas por JWT (middleware)
-    let protected = Router::new()
+    // Rutas protegidas por auth pero que NO necesitan un profile (para que el usuario pueda crear su profile)
+    let auth_only = Router::new()
         .route(
             "/user",
             get(get_user_logic::handler).delete(user_delete_logic::handler),
@@ -235,7 +236,10 @@ pub fn app_with_state(
         .route(
             "/user/shares/{id}",
             put(user_share_put_logic::handler).delete(user_share_delete_logic::handler),
-        )
+        );
+
+    // Rutas protegidas por JWT (middleware)
+    let profile_gated = Router::new()
         .route("/user/shares/trends", get(user_share_trend_logic::handler))
         .route(
             "/user/shares/{ticker}/trends/compare",
@@ -272,6 +276,13 @@ pub fn app_with_state(
             "/user/shares/balance/history",
             get(balance_history_logic::handler),
         )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_profile,
+        ));
+
+    let protected = auth_only
+        .merge(profile_gated)
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body

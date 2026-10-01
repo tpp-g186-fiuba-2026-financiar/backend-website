@@ -172,12 +172,21 @@ async fn setup() -> (AppState, String, String) {
             .as_nanos()
     );
     let user_id: i32 = sqlx::query_scalar(
-        "INSERT INTO users (email, password_hash, full_name, risk_profile) VALUES ($1, 'hash', 'Coverage', 'moderate') RETURNING id",
+        "INSERT INTO users (email, password_hash, full_name) VALUES ($1, 'hash', 'Coverage') RETURNING id",
     )
     .bind(&email)
     .fetch_one(&pool)
     .await
     .unwrap();
+
+    sqlx::query(
+        "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
     let share_id: i32 = sqlx::query_scalar(
         "INSERT INTO shares (ticker) VALUES ('COVR') ON CONFLICT (ticker) DO UPDATE SET ticker = EXCLUDED.ticker RETURNING id",
     )
