@@ -327,6 +327,7 @@
                   "created_at": "2026-05-13T12:00:00Z",
                   "email": "financiar186@gmail.com",
                   "full_name": "John Doe",
+                  "has_to_redo_risk_profile": false,
                   "id": 1,
                   "is_active": true,
                   "risk_profile": "moderate",
@@ -1276,6 +1277,7 @@
           "id",
           "email",
           "full_name",
+          "has_to_redo_risk_profile",
           "is_active",
           "two_factor_enabled",
           "created_at"
@@ -1290,6 +1292,9 @@
           },
           "full_name": {
             "type": "string"
+          },
+          "has_to_redo_risk_profile": {
+            "type": "boolean"
           },
           "id": {
             "type": "integer",
