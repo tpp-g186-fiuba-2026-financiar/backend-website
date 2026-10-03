@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT risk_profile, expires_at as \"expires_at: chrono::DateTime<chrono::Utc>\"\n        FROM user_investing_profiles\n        WHERE user_id = $1\n        ORDER BY created_at DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "risk_profile",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "expires_at: chrono::DateTime<chrono::Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b0f2bfb9a2afa317cfe3b0f8b31e0007b84f636301e247420dc6f3b31a3aae31"
+}
