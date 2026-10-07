@@ -219,7 +219,7 @@ fn pick_best_model(predictions: &serde_json::Map<String, Value>) -> String {
         .unwrap_or_else(|| "lstm-modal".to_string())
 }
 
-/// Modelos locales de `api-ml` (lstm/xgboost/transformer/arima): un modelo
+/// Modelos locales de `api-ml` (lstm/xgboost/transformer/arima/macro): un modelo
 /// pooleado sobre todo el panel (a diferencia de los `-modal`, que son
 /// per-ticker), con backtest walk-forward propio. Se muestran como
 /// alternativa junto a los de Modal, no en reemplazo.
@@ -228,7 +228,7 @@ async fn fetch_api_ml_local_models(
     api_ml_url: Option<&str>,
     ticker: &str,
 ) -> HashMap<String, Value> {
-    const LOCAL_MODEL_KEYS: [&str; 4] = ["lstm", "xgboost", "transformer", "arima"];
+    const LOCAL_MODEL_KEYS: [&str; 5] = ["lstm", "xgboost", "transformer", "arima", "macro"];
     let Some(api_ml_url) = api_ml_url else {
         return LOCAL_MODEL_KEYS
             .into_iter()

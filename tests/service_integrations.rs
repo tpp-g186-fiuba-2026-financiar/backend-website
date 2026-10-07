@@ -119,7 +119,8 @@ async fn local_models(Path(_ticker): Path<String>) -> Json<Value> {
         "predictions": {
             "lstm": {"signal": "alza", "backtest": {"directional_accuracy": 0.6, "observations": 12}},
             "xgboost": {"available": false, "reason": "sin artefacto"},
-            "transformer": {"signal": "neutral", "backtest": {"directional_accuracy": 0.5, "observations": 12}}
+            "transformer": {"signal": "neutral", "backtest": {"directional_accuracy": 0.5, "observations": 12}},
+            "macro": {"signal": "baja", "horizon_days": 20, "probability_down": 0.61}
         }
     }))
 }
@@ -329,6 +330,9 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
         body["predictions"]["garch-modal"]["volatility_forecast"][0]["horizon_days"],
         1
     );
+    assert_eq!(body["predictions"]["macro"]["signal"], "baja");
+    assert_eq!(body["predictions"]["macro"]["horizon_days"], 20);
+    assert_eq!(body["predictions"]["macro"]["available"], true);
 
     let (status, body) = request(
         app.clone(),
