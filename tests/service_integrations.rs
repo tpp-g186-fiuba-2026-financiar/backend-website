@@ -321,7 +321,6 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
         body["predictions"]["garch-modal"]["volatility_forecast"][0]["horizon_days"],
         1
     );
-    // El modelo "macro" de api-ml llega al frontend junto a los demas.
     assert_eq!(body["predictions"]["macro"]["signal"], "baja");
     assert_eq!(body["predictions"]["macro"]["horizon_days"], 20);
     assert_eq!(body["predictions"]["macro"]["available"], true);
