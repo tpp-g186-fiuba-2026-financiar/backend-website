@@ -20,6 +20,7 @@ const DEFAULT_TRANSFORMER_URL: &str =
 const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
 const DEFAULT_SVM_URL: &str = "https://matimorales01--svm-model-main.modal.run";
 const DEFAULT_GARCH_URL: &str = "https://matimorales01--garch-model-main.modal.run";
+const DEFAULT_GARCH_ANN_URL: &str = "https://matimorales01--garch-ann-model-main.modal.run";
 
 #[derive(Serialize, ToSchema)]
 pub struct ModelPredictionItem {
@@ -81,15 +82,18 @@ pub async fn handler(
     let arima_url = std::env::var("MODAL_ARIMA_URL").unwrap_or_else(|_| DEFAULT_ARIMA_URL.into());
     let svm_url = std::env::var("MODAL_SVM_URL").unwrap_or_else(|_| DEFAULT_SVM_URL.into());
     let garch_url = std::env::var("MODAL_GARCH_URL").unwrap_or_else(|_| DEFAULT_GARCH_URL.into());
+    let garch_ann_url =
+        std::env::var("MODAL_GARCH_ANN_URL").unwrap_or_else(|_| DEFAULT_GARCH_ANN_URL.into());
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
-    let (lstm, xgboost, transformer, arima, svm, garch, api_ml_models, consensus) = tokio::join!(
+    let (lstm, xgboost, transformer, arima, svm, garch, garch_ann, api_ml_models, consensus) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
         fetch_modal(&client, "transformer-modal", &transformer_url, &ticker),
         fetch_arima(&client, &arima_url, &ticker),
         fetch_svm(&client, &svm_url, &ticker),
         fetch_garch(&client, &garch_url, &ticker),
+        fetch_garch_ann(&client, &garch_ann_url, &ticker),
         fetch_api_ml_local_models(&client, api_ml_url.as_deref(), &ticker),
         fetch_consensus(&client, api_ml_url.as_deref(), &ticker, &risk_profile),
     );
@@ -106,6 +110,7 @@ pub async fn handler(
     predictions.insert("arima-modal".into(), arima);
     predictions.insert("svm-modal".into(), svm);
     predictions.insert("garch-modal".into(), garch);
+    predictions.insert("garch-ann-modal".into(), garch_ann);
     for (key, value) in api_ml_models {
         predictions.insert(key, value);
     }
@@ -469,6 +474,54 @@ async fn fetch_garch(client: &reqwest::Client, url: &str, ticker: &str) -> Value
         }
         Ok(response) => unavailable(&format!("GARCH respondio HTTP {}", response.status())),
         Err(error) => unavailable(&format!("No se pudo contactar a GARCH: {error}")),
+    }
+}
+
+/// GARCH-ANN (repo `models`) estima el movimiento absoluto esperado del dia
+/// siguiente (`next_day_abs_return_pct`). Como GARCH, no da direccion: se
+/// marca `available: false` y se expone como `volatility_forecast` a 1 dia.
+async fn fetch_garch_ann(client: &reqwest::Client, url: &str, ticker: &str) -> Value {
+    match client.get(url).query(&[("ticker", ticker)]).send().await {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(body) if body.get("error").is_none() => {
+                let expected = body
+                    .get("prediction")
+                    .and_then(|p| p.get("next_day_abs_return_pct"))
+                    .and_then(Value::as_f64);
+                let volatility_forecast = expected.map(|value| {
+                    vec![json!({
+                        "horizon_days": 1,
+                        "volatility_pct": (value.max(0.0) * 100.0).round() / 100.0
+                    })]
+                });
+                json!({
+                    "available": false,
+                    "signal": null,
+                    "condition": null,
+                    "rsi": null,
+                    "horizon_days": null,
+                    "last_close": null,
+                    "predicted_close": null,
+                    "as_of": null,
+                    "model": "garch-ann-modal",
+                    "model_version": body.get("model_version"),
+                    "backtest": body.get("backtest"),
+                    "volatility_forecast": volatility_forecast,
+                    "reason": "GARCH-ANN proyecta el movimiento esperado, no una direccion: no participa del comparador de tendencia"
+                })
+            }
+            Ok(body) => unavailable(
+                body.get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("GARCH-ANN devolvio una respuesta invalida"),
+            ),
+            Err(error) => unavailable(&format!("Respuesta invalida de GARCH-ANN: {error}")),
+        },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable("Servicio de predicciones no disponible")
+        }
+        Ok(response) => unavailable(&format!("GARCH-ANN respondio HTTP {}", response.status())),
+        Err(error) => unavailable(&format!("No se pudo contactar a GARCH-ANN: {error}")),
     }
 }
 

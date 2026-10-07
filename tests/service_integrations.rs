@@ -114,6 +114,14 @@ async fn garch_model() -> Json<Value> {
     }))
 }
 
+async fn garch_ann_model() -> Json<Value> {
+    Json(json!({
+        "prediction": {"next_day_abs_return_pct": 1.234},
+        "model_version": "coverage-v1",
+        "backtest": {"abs_return_mae": 0.9}
+    }))
+}
+
 async fn local_models(Path(_ticker): Path<String>) -> Json<Value> {
     Json(json!({
         "predictions": {
@@ -150,6 +158,7 @@ async fn start_stub() -> (String, StubState) {
         .route("/arima", get(arima_model))
         .route("/svm", get(svm_model))
         .route("/garch", get(garch_model))
+        .route("/garch-ann", get(garch_ann_model))
         .route("/predict/trend/compare/{ticker}", get(local_models))
         .route("/portfolio/recomendacion", post(portfolio))
         .with_state(state.clone());
@@ -245,6 +254,7 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     std::env::set_var("MODAL_ARIMA_URL", format!("{base}/arima"));
     std::env::set_var("MODAL_SVM_URL", format!("{base}/svm"));
     std::env::set_var("MODAL_GARCH_URL", format!("{base}/garch"));
+    std::env::set_var("MODAL_GARCH_ANN_URL", format!("{base}/garch-ann"));
 
     let (state, token, email) = setup().await;
     let app = build_app(state.clone()).await;
@@ -320,6 +330,10 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     assert_eq!(
         body["predictions"]["garch-modal"]["volatility_forecast"][0]["horizon_days"],
         1
+    );
+    assert_eq!(
+        body["predictions"]["garch-ann-modal"]["volatility_forecast"][0]["volatility_pct"],
+        1.23
     );
     assert_eq!(body["predictions"]["macro"]["signal"], "baja");
     assert_eq!(body["predictions"]["macro"]["horizon_days"], 20);
