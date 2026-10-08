@@ -6,6 +6,7 @@ pub mod history_logic;
 pub mod pnl_logic;
 pub mod portfolio_logic;
 pub mod post_logic;
+pub mod post_user_preferences;
 pub mod put_logic;
 pub mod trend_logic;
 pub mod user_share_balance_logic;
