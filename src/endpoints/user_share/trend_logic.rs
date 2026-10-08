@@ -673,7 +673,10 @@ mod tests {
         let previous_arima = std::env::var("MODAL_ARIMA_URL").ok();
 
         std::env::set_var("MODAL_LSTM_URL", "https://custom-lstm.example");
-        std::env::set_var("MODAL_TRANSFORMER_URL", "https://custom-transformer.example");
+        std::env::set_var(
+            "MODAL_TRANSFORMER_URL", 
+            "https://custom-transformer.example"
+        );
         std::env::set_var("MODAL_XGBOOST_URL", "https://custom-xgboost.example");
         std::env::set_var("MODAL_ARIMA_URL", "https://custom-arima.example");
 
