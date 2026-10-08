@@ -200,7 +200,12 @@ async fn user_preferences_are_used_when_fetching_trends() {
         .unwrap();
 
     assert_eq!(trend_response.status(), StatusCode::OK);
-    let body = trend_response.into_body().collect().await.unwrap().to_bytes();
+    let body = trend_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let json: Value = serde_json::from_slice(&body).unwrap();
 
     let trend = json["trends"]
