@@ -55,6 +55,9 @@ use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
 use crate::endpoints::user_share::post_logic::{
     self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
 };
+use crate::endpoints::user_share::post_user_preferences::{
+    SaveUserPreferenceRequest, SaveUserPreferenceResponse,
+};
 use crate::endpoints::user_share::put_logic::{
     self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
@@ -103,6 +106,7 @@ impl Modify for SecurityAddon {
         endpoints::user::two_factor::two_factor_logic::disable,
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
+        endpoints::user_share::post_user_preferences::handler,
         endpoints::user_share::delete_logic::handler,
         endpoints::user_share::put_logic::handler,
         endpoints::user_share::trend_logic::handler,
@@ -129,6 +133,8 @@ impl Modify for SecurityAddon {
             GetUserResponse,
             CreateShareRequest,
             CreateShareResponse,
+            SaveUserPreferenceRequest,
+            SaveUserPreferenceResponse,
             ListSharesResponse,
             ShareItem,
             UpdateShareRequest,
@@ -225,6 +231,10 @@ pub fn app_with_state(
         .route(
             "/user/risk-profile",
             patch(update_risk_profile_logic::handler),
+        )
+        .route(
+            "/user/preferences",
+            post(endpoints::user_share::post_user_preferences::handler),
         )
         .route("/user/2fa/setup", post(two_factor_logic::setup))
         .route("/user/2fa/enable", post(two_factor_logic::enable))

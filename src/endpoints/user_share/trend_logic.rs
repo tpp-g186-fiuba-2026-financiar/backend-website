@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{LazyLock, Mutex},
     time::Duration,
 };
@@ -14,6 +14,12 @@ use utoipa::ToSchema;
 use crate::auth::middleware::AuthUser;
 
 const MAX_CONCURRENT_PREPARATIONS: usize = 2;
+const DEFAULT_LSTM_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
+const DEFAULT_XGBOOST_URL: &str = "https://matimorales01--xgboost-trend-model-main.modal.run";
+const DEFAULT_TRANSFORMER_URL: &str =
+    "https://matimorales01--transformer-trend-model-main.modal.run";
+const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
+const DEFAULT_MODEL: &str = "lstm-modal";
 static PREPARING_TICKERS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
@@ -43,7 +49,7 @@ pub struct ListTrendsResponse {
     get,
     path = "/user/shares/trends",
     responses(
-        (status = 200, description = "Trend prediction (Modal) for each stock declared by the authenticated user", body = ListTrendsResponse, example = json!({
+        (status = 200, description = "Trend prediction from each stock's preferred model, or lstm-modal by default", body = ListTrendsResponse, example = json!({
             "trends": [
                 {
                     "ticker": "GGAL",
@@ -118,6 +124,45 @@ pub async fn handler(
         }
     };
 
+    let preferences = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"
+        SELECT stock, model
+        FROM user_preferences
+        WHERE user_id = $1 AND stock = ANY($2)
+        "#,
+    )
+    .bind(auth_user.user_id)
+    .bind(&tickers)
+    .fetch_all(&pool)
+    .await;
+
+    let models_by_ticker = match preferences {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|(stock, model)| {
+                let model = preferred_model(model.as_deref()).to_string();
+                (stock, model)
+            })
+            .collect::<HashMap<_, _>>(),
+        Err(err) => {
+            tracing::error!("Failed to load user stock model preferences: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "code": 500,
+                    "message": "An unexpected error occurred. Please try again later."
+                })),
+            );
+        }
+    };
+
+    let model_for_ticker = |ticker: &str| {
+        models_by_ticker
+            .get(ticker)
+            .map(String::as_str)
+            .unwrap_or(DEFAULT_MODEL)
+    };
+
     let mut trends = Vec::with_capacity(tickers.len());
     if !tickers.is_empty() {
         // Las predicciones solo cambian una vez por rueda (as_of es diario): servir
@@ -137,9 +182,16 @@ pub async fn handler(
             tracing::error!("No se pudo leer la cache de tendencias: {}", error);
             Vec::new()
         });
-        let cached_tickers: HashSet<String> =
-            cached.iter().map(|(ticker, _)| ticker.clone()).collect();
-        trends.extend(cached.into_iter().map(|(_, payload)| payload));
+        let cached_tickers: HashSet<String> = cached
+            .into_iter()
+            .filter_map(|(ticker, payload)| {
+                (payload.get("model").and_then(Value::as_str) == Some(model_for_ticker(&ticker)))
+                    .then(|| {
+                        trends.push(payload);
+                        ticker
+                    })
+            })
+            .collect();
 
         let to_fetch: Vec<String> = tickers
             .into_iter()
@@ -147,9 +199,6 @@ pub async fn handler(
             .collect();
 
         if !to_fetch.is_empty() {
-            let modal_lstm_url = std::env::var("MODAL_LSTM_URL").unwrap_or_else(|_| {
-                "https://matimorales01--lstm-trend-model-main.modal.run".into()
-            });
             // El proxy de Render puede cortar la request antes que un cold start de
             // Modal. Cortamos nosotros primero para responder 200 con cada ticker
             // en estado "preparando" y no perder CORS con un 502 del proxy.
@@ -160,10 +209,14 @@ pub async fn handler(
             let mut requests = JoinSet::new();
             for ticker in to_fetch {
                 let client = client.clone();
-                let modal_lstm_url = modal_lstm_url.clone();
+                let model = model_for_ticker(&ticker).to_string();
+                let model_url = modal_url(&model);
                 requests.spawn(async move {
-                    let trend = fetch_trend(&client, &modal_lstm_url, &ticker).await;
-                    if needs_preparation(&trend) && prepare_models_in_background(&ticker) {
+                    let trend = fetch_selected_trend(&client, &model, &model_url, &ticker).await;
+                    if matches!(model.as_str(), "lstm-modal" | "xgboost-modal")
+                        && needs_preparation(&trend)
+                        && prepare_models_in_background(&ticker)
+                    {
                         discover_ticker_for_training(&ticker);
                     }
                     trend
@@ -210,6 +263,47 @@ pub async fn handler(
     }
 
     (StatusCode::OK, Json(json!({ "trends": trends })))
+}
+
+fn preferred_model(model: Option<&str>) -> &str {
+    match model {
+        Some(model)
+            if matches!(
+                model,
+                "arima-modal" | "lstm-modal" | "transformer-modal" | "xgboost-modal"
+            ) =>
+        {
+            model
+        }
+        _ => DEFAULT_MODEL,
+    }
+}
+
+fn modal_url(model: &str) -> String {
+    let (environment_variable, default_url) = match model {
+        "arima-modal" => ("MODAL_ARIMA_URL", DEFAULT_ARIMA_URL),
+        "transformer-modal" => ("MODAL_TRANSFORMER_URL", DEFAULT_TRANSFORMER_URL),
+        "xgboost-modal" => ("MODAL_XGBOOST_URL", DEFAULT_XGBOOST_URL),
+        _ => ("MODAL_LSTM_URL", DEFAULT_LSTM_URL),
+    };
+    std::env::var(environment_variable).unwrap_or_else(|_| default_url.to_string())
+}
+
+async fn fetch_selected_trend(
+    client: &reqwest::Client,
+    model: &str,
+    model_url: &str,
+    ticker: &str,
+) -> Value {
+    let mut trend = if model == "arima-modal" {
+        fetch_armia_trend(client, model_url, ticker).await
+    } else {
+        fetch_modal_trend(client, model, model_url, ticker).await
+    };
+    if let Some(object) = trend.as_object_mut() {
+        object.insert("model".into(), Value::String(model.to_string()));
+    }
+    trend
 }
 
 /// Dispara el bootstrap en Modal sin hacer esperar al request del usuario.
@@ -298,10 +392,19 @@ fn discover_ticker_for_training(ticker: &str) {
     });
 }
 
-/// Pide la tendencia de un ticker al LSTM productivo de Modal. Si falla (caido, timeout, ticker
+/// Pide la tendencia de un ticker al modelo productivo de Modal. Si falla (caido, timeout, ticker
 /// sin modelo entrenado, etc.) no corta el resto: devuelve un item marcado
 /// como no disponible en vez de tirar 500 para todos los demas tickers.
 pub(crate) async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticker: &str) -> Value {
+    fetch_modal_trend(client, DEFAULT_MODEL, modal_url, ticker).await
+}
+
+async fn fetch_modal_trend(
+    client: &reqwest::Client,
+    model: &str,
+    modal_url: &str,
+    ticker: &str,
+) -> Value {
     let response = client
         .get(modal_url)
         .query(&[("ticker", ticker), ("horizon", "5")])
@@ -320,9 +423,10 @@ pub(crate) async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticke
                 "last_close": body.get("last_close"),
                 "predicted_close": body.get("predicted_close"),
                 "as_of": body.get("as_of"),
-                "model": "lstm-modal",
+                "model": model,
                 "model_version": body.get("model_version"),
                 "reason": Value::Null,
+                "retryable": false,
             }),
             Ok(body) => unavailable(
                 ticker,
@@ -347,6 +451,81 @@ pub(crate) async fn fetch_trend(client: &reqwest::Client, modal_url: &str, ticke
         Err(err) => {
             tracing::error!("No se pudo contactar a Modal para {}: {}", ticker, err);
             unavailable(ticker, "No se pudo contactar a Modal", true)
+        }
+    }
+}
+
+async fn fetch_armia_trend(client: &reqwest::Client, model_url: &str, ticker: &str) -> Value {
+    let response = client
+        .get(model_url)
+        .query(&[
+            ("ticker", ticker),
+            ("predictions", "5"),
+            ("media_movil", "20"),
+        ])
+        .send()
+        .await;
+
+    match response {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(body) if body.get("error").is_none() => {
+                let last_close = body.get("valor_actual").and_then(Value::as_f64);
+                let predicted_close = body
+                    .get("prediction")
+                    .and_then(Value::as_array)
+                    .and_then(|values| values.last())
+                    .and_then(Value::as_f64);
+                match (last_close, predicted_close) {
+                    (Some(last_close), Some(predicted_close)) => {
+                        let change = predicted_close / last_close - 1.0;
+                        let signal = if change > 0.01 {
+                            "alza"
+                        } else if change < -0.01 {
+                            "baja"
+                        } else {
+                            "neutral"
+                        };
+                        json!({
+                            "ticker": ticker,
+                            "available": true,
+                            "signal": signal,
+                            "condition": body.get("condition"),
+                            "rsi": body.get("rsi"),
+                            "horizon_days": 5,
+                            "last_close": last_close,
+                            "predicted_close": predicted_close,
+                            "as_of": body.get("as_of"),
+                            "model": "arima-modal",
+                            "model_version": body.get("model_version"),
+                            "reason": Value::Null,
+                            "retryable": false,
+                        })
+                    }
+                    _ => unavailable(ticker, "ARIMA no devolvio precios validos", false),
+                }
+            }
+            Ok(body) => unavailable(
+                ticker,
+                body.get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("ARIMA devolvio una respuesta invalida"),
+                false,
+            ),
+            Err(error) => {
+                tracing::error!("Respuesta invalida de ARIMA para {}: {}", ticker, error);
+                unavailable(ticker, "Respuesta invalida de ARIMA", true)
+            }
+        },
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            unavailable(ticker, "Servicio de predicciones no disponible", false)
+        }
+        Ok(response) => {
+            tracing::warn!("ARIMA respondio {} para {}", response.status(), ticker);
+            unavailable(ticker, "ARIMA no pudo predecir para este ticker", true)
+        }
+        Err(error) => {
+            tracing::error!("No se pudo contactar a ARIMA para {}: {}", ticker, error);
+            unavailable(ticker, "No se pudo contactar a ARIMA", true)
         }
     }
 }
@@ -404,6 +583,26 @@ mod tests {
                 get(|| async { StatusCode::INTERNAL_SERVER_ERROR.into_response() }),
             )
             .route(
+                "/modal",
+                get(|| async {
+                    Json(json!({
+                        "signal": "alza",
+                        "horizon_days": 5,
+                        "last_close": 100.0,
+                        "predicted_close": 105.0
+                    }))
+                }),
+            )
+            .route(
+                "/arima",
+                get(|| async {
+                    Json(json!({
+                        "valor_actual": 100.0,
+                        "prediction": [105.0]
+                    }))
+                }),
+            )
+            .route(
                 "/prepare",
                 get(|| async {
                     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -453,5 +652,101 @@ mod tests {
         assert!(!prepare_models_in_background("COV-C"));
         discover_ticker_for_training("COV-A");
         tokio::time::sleep(Duration::from_millis(180)).await;
+    }
+
+    #[test]
+    fn missing_or_null_preference_defaults_to_lstm() {
+        assert_eq!(preferred_model(None), "lstm-modal");
+        assert_eq!(preferred_model(Some("lstm-modal")), "lstm-modal");
+        assert_eq!(
+            preferred_model(Some("transformer-modal")),
+            "transformer-modal"
+        );
+        assert_eq!(preferred_model(Some("unsupported")), "lstm-modal");
+    }
+
+    #[test]
+    fn modal_url_prefers_env_overrides_and_falls_back_to_defaults() {
+        let previous_lstm = std::env::var("MODAL_LSTM_URL").ok();
+        let previous_transformer = std::env::var("MODAL_TRANSFORMER_URL").ok();
+        let previous_xgboost = std::env::var("MODAL_XGBOOST_URL").ok();
+        let previous_arima = std::env::var("MODAL_ARIMA_URL").ok();
+
+        std::env::set_var("MODAL_LSTM_URL", "https://custom-lstm.example");
+        std::env::set_var(
+            "MODAL_TRANSFORMER_URL",
+            "https://custom-transformer.example",
+        );
+        std::env::set_var("MODAL_XGBOOST_URL", "https://custom-xgboost.example");
+        std::env::set_var("MODAL_ARIMA_URL", "https://custom-arima.example");
+
+        assert_eq!(modal_url("lstm-modal"), "https://custom-lstm.example");
+        assert_eq!(
+            modal_url("transformer-modal"),
+            "https://custom-transformer.example"
+        );
+        assert_eq!(modal_url("xgboost-modal"), "https://custom-xgboost.example");
+        assert_eq!(modal_url("arima-modal"), "https://custom-arima.example");
+        assert_eq!(modal_url("unknown-model"), "https://custom-lstm.example");
+
+        std::env::remove_var("MODAL_LSTM_URL");
+        std::env::remove_var("MODAL_TRANSFORMER_URL");
+        std::env::remove_var("MODAL_XGBOOST_URL");
+        std::env::remove_var("MODAL_ARIMA_URL");
+
+        assert_eq!(modal_url("lstm-modal"), DEFAULT_LSTM_URL);
+        assert_eq!(modal_url("transformer-modal"), DEFAULT_TRANSFORMER_URL);
+        assert_eq!(modal_url("xgboost-modal"), DEFAULT_XGBOOST_URL);
+        assert_eq!(modal_url("arima-modal"), DEFAULT_ARIMA_URL);
+
+        if let Some(value) = previous_lstm {
+            std::env::set_var("MODAL_LSTM_URL", value);
+        }
+        if let Some(value) = previous_transformer {
+            std::env::set_var("MODAL_TRANSFORMER_URL", value);
+        }
+        if let Some(value) = previous_xgboost {
+            std::env::set_var("MODAL_XGBOOST_URL", value);
+        }
+        if let Some(value) = previous_arima {
+            std::env::set_var("MODAL_ARIMA_URL", value);
+        }
+    }
+
+    #[test]
+    fn unavailable_payload_and_preparation_signal_are_consistent() {
+        let payload = unavailable("GGAL", "todavia no hay un modelo entrenado", false);
+        assert_eq!(payload["ticker"], "GGAL");
+        assert_eq!(payload["available"], false);
+        assert_eq!(payload["retryable"], false);
+        assert_eq!(payload["reason"], "todavia no hay un modelo entrenado");
+        assert!(needs_preparation(&payload));
+
+        let other = unavailable("GGAL", "No se pudo contactar a Modal", true);
+        assert!(!needs_preparation(&other));
+        assert_eq!(other["retryable"], true);
+    }
+
+    #[tokio::test]
+    async fn selected_modal_model_is_returned_with_its_prediction() {
+        let base = start_stub().await;
+        let client = reqwest::Client::new();
+
+        let transformer = fetch_selected_trend(
+            &client,
+            "transformer-modal",
+            &format!("{base}/modal"),
+            "GGAL",
+        )
+        .await;
+        assert_eq!(transformer["available"], true);
+        assert_eq!(transformer["model"], "transformer-modal");
+        assert_eq!(transformer["ticker"], "GGAL");
+
+        let arima =
+            fetch_selected_trend(&client, "arima-modal", &format!("{base}/arima"), "YPFD").await;
+        assert_eq!(arima["available"], true);
+        assert_eq!(arima["model"], "arima-modal");
+        assert_eq!(arima["predicted_close"], 105.0);
     }
 }
