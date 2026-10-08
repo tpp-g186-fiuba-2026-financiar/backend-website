@@ -73,6 +73,11 @@ async fn register_and_login(state: &AppState, email: &str, password: &str) -> St
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK, "register should succeed");
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(email)
+        .execute(&state.pool)
+        .await
+        .expect("mark email as verified");
 
     let login_body = json!({ "email": email, "password": password });
     let response = app

@@ -324,6 +324,11 @@ async fn register_persists_full_name_and_risk_profile() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(&email)
+        .execute(&state.pool)
+        .await
+        .expect("mark email as verified");
 
     let login_response = app
         .clone()
@@ -405,8 +410,27 @@ async fn register_stores_hashed_password_not_plaintext() {
     cleanup(&state.pool, &email).await;
 }
 
+async fn login_json(app: &Router, email: &str) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({ "email": email, "password": "StrongPassword123!" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&body).unwrap()
+}
+
 #[tokio::test]
-async fn register_new_user_can_immediately_login() {
+async fn register_new_user_can_login_only_after_verifying_email() {
     let state = setup().await;
     let email = unique_email("login_after");
     let app = build_app(state.clone()).await;
@@ -422,26 +446,18 @@ async fn register_new_user_can_immediately_login() {
     .await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let login_response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    json!({ "email": email, "password": "StrongPassword123!" }).to_string(),
-                ))
-                .unwrap(),
-        )
+    let json = login_json(&app, &email).await;
+    assert_eq!(json["code"], 403);
+    assert_eq!(json["email_verification_required"], true);
+    assert!(json["token"].is_null());
+
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(&email)
+        .execute(&state.pool)
         .await
-        .unwrap();
-    let body = login_response
-        .into_body()
-        .collect()
-        .await
-        .unwrap()
-        .to_bytes();
-    let json: Value = serde_json::from_slice(&body).unwrap();
+        .expect("mark email as verified");
+
+    let json = login_json(&app, &email).await;
     assert_eq!(json["code"], 200);
     assert!(json["token"].as_str().is_some_and(|t| !t.is_empty()));
 

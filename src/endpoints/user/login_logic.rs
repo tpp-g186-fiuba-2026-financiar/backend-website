@@ -9,6 +9,9 @@ use utoipa::ToSchema;
 use crate::auth::jwt::JwtConfig;
 use crate::endpoints::user::two_factor::totp::verify_code;
 
+/// (password_hash, id, totp_secret, two_factor_enabled, email_verified)
+type UserLoginRow = (String, i32, Option<String>, bool, bool);
+
 #[derive(Deserialize, ToSchema)]
 pub struct LoginUserRequest {
     #[schema(example = "financiar186@gmail.com")]
@@ -30,6 +33,10 @@ pub struct LoginUserResponse {
     pub token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub two_factor_required: Option<bool>,
+    /// true cuando la contrasena es correcta pero el mail todavia no se
+    /// verifico (ver /verify-email y /verify-email/resend).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_verification_required: Option<bool>,
 }
 
 #[utoipa::path(
@@ -50,6 +57,11 @@ pub struct LoginUserResponse {
             "code": 401,
             "message": "Two-factor code required",
             "two_factor_required": true
+        })),
+        (status = 403, description = "Valid credentials but the email is not verified yet (email_verification_required = true)", body = LoginUserResponse, example = json!({
+            "code": 403,
+            "message": "Email not verified",
+            "email_verification_required": true
         })),
         (status = 500, description = "Internal server error", body = LoginUserResponse, example = json!({
             "code": 500,
@@ -74,15 +86,15 @@ pub async fn handler(
     let email = payload.email.trim();
 
     let user_result = sqlx::query(
-        "SELECT password_hash, id, totp_secret, two_factor_enabled FROM users WHERE email = $1",
+        "SELECT password_hash, id, totp_secret, two_factor_enabled, email_verified FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(&pool)
     .await;
 
-    let (stored_hash, serial_id, totp_secret, two_factor_enabled) = match user_result {
+    let (stored_hash, serial_id, totp_secret, two_factor_enabled, verified) = match user_result {
         Ok(Some(row)) => {
-            let (password_hashed, id, secret, enabled): (String, i32, Option<String>, bool) =
+            let (password_hashed, id, secret, enabled, verified): UserLoginRow =
                 match sqlx::FromRow::from_row(&row) {
                     Ok(data) => data,
                     Err(err) => {
@@ -93,7 +105,7 @@ pub async fn handler(
                         }));
                     }
                 };
-            (password_hashed, id, secret, enabled)
+            (password_hashed, id, secret, enabled, verified)
         }
         Ok(None) => {
             return axum::response::Json(json!({
@@ -114,6 +126,14 @@ pub async fn handler(
         return axum::response::Json(json!({
             "code": 401,
             "message": "Invalid email or password"
+        }));
+    }
+
+    if !verified {
+        return axum::response::Json(json!({
+            "code": 403,
+            "message": "Email not verified",
+            "email_verification_required": true
         }));
     }
 

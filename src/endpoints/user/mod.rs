@@ -1,4 +1,5 @@
 pub mod delete_logic;
+pub mod email_verification;
 pub mod get_user_logic;
 pub mod login_logic;
 pub mod registration;

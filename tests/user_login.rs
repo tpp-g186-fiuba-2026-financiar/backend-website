@@ -73,6 +73,15 @@ async fn register(app: &Router, email: &str, password: &str) {
     assert_eq!(response.status(), StatusCode::OK, "register should succeed");
 }
 
+async fn register_verified(app: &Router, pool: &sqlx::PgPool, email: &str, password: &str) {
+    register(app, email, password).await;
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(email)
+        .execute(pool)
+        .await
+        .expect("mark email as verified");
+}
+
 async fn login_request(app: &Router, email: &str, password: &str) -> axum::response::Response {
     app.clone()
         .oneshot(
@@ -149,7 +158,7 @@ async fn login_with_wrong_password_returns_401() {
     let state = setup().await;
     let email = unique_email("wrongpass");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let response = login_request(&app, &email, "TotallyWrongPassword!").await;
 
@@ -170,7 +179,7 @@ async fn login_email_is_case_sensitive_or_untrimmed_variant_fails_gracefully() {
     let state = setup().await;
     let email = unique_email("case");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let uppercased = email.to_uppercase();
     let response = login_request(&app, &uppercased, "StrongPassword123!").await;
@@ -190,7 +199,7 @@ async fn login_with_valid_credentials_returns_200_and_token() {
     let state = setup().await;
     let email = unique_email("happy");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let response = login_request(&app, &email, "StrongPassword123!").await;
 
@@ -209,7 +218,7 @@ async fn login_sets_session_cookie_on_success() {
     let state = setup().await;
     let email = unique_email("session");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let response = login_request(&app, &email, "StrongPassword123!").await;
 
@@ -226,7 +235,7 @@ async fn login_issues_a_usable_token_for_protected_routes() {
     let state = setup().await;
     let email = unique_email("usable");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let response = login_request(&app, &email, "StrongPassword123!").await;
     let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -255,7 +264,7 @@ async fn login_after_account_deletion_returns_401() {
     let state = setup().await;
     let email = unique_email("deleted");
     let app = build_app(state.clone()).await;
-    register(&app, &email, "StrongPassword123!").await;
+    register_verified(&app, &state.pool, &email, "StrongPassword123!").await;
 
     let first_login = login_request(&app, &email, "StrongPassword123!").await;
     let body = first_login.into_body().collect().await.unwrap().to_bytes();
