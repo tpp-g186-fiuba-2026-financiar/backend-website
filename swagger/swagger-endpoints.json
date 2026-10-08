@@ -119,6 +119,21 @@
               }
             }
           },
+          "403": {
+            "description": "Valid credentials but the email is not verified yet (email_verification_required = true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 403,
+                  "email_verification_required": true,
+                  "message": "Email not verified"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -154,7 +169,7 @@
         },
         "responses": {
           "200": {
-            "description": "User registered successfully",
+            "description": "User registered successfully. A verification email is sent and the account can't log in until it is verified (see /verify-email)",
             "content": {
               "application/json": {
                 "schema": {
@@ -653,50 +668,6 @@
         ]
       }
     },
-    "/user/preferences": {
-      "post": {
-        "tags": [
-          "User"
-        ],
-        "operationId": "handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveUserPreferenceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Preference saved for the authenticated user and stock",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SaveUserPreferenceResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid stock ticker or unsupported model"
-          },
-          "401": {
-            "description": "Missing or invalid authentication token"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
     "/user/shares": {
       "get": {
         "tags": [
@@ -944,7 +915,7 @@
         "operationId": "handler",
         "responses": {
           "200": {
-            "description": "Trend prediction from each stock's preferred model, or lstm-modal by default",
+            "description": "Trend prediction (Modal) for each stock declared by the authenticated user",
             "content": {
               "application/json": {
                 "schema": {
@@ -1192,6 +1163,116 @@
           }
         ]
       }
+    },
+    "/verify-email": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Cuenta verificada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "Email verified successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token invalido, vencido o ya usado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 400,
+                  "message": "Invalid or expired verification token"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify-email/resend": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta generica: se reenvia el mail solo si la cuenta existe, no esta verificada y no se envio otro en el ultimo minuto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "If the account exists and is not verified yet, a new verification email was sent"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1312,6 +1393,23 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "EmailVerificationResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
           }
         }
       },
@@ -1506,6 +1604,13 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "email_verification_required": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "true cuando la contrasena es correcta pero el mail todavia no se\nverifico (ver /verify-email y /verify-email/resend)."
           },
           "message": {
             "type": "string"
@@ -1713,40 +1818,15 @@
           }
         }
       },
-      "SaveUserPreferenceRequest": {
+      "ResendVerificationRequest": {
         "type": "object",
         "required": [
-          "stock",
-          "model"
+          "email"
         ],
         "properties": {
-          "model": {
+          "email": {
             "type": "string",
-            "example": "lstm-modal"
-          },
-          "stock": {
-            "type": "string",
-            "example": "GGAL"
-          }
-        }
-      },
-      "SaveUserPreferenceResponse": {
-        "type": "object",
-        "required": [
-          "user_id",
-          "stock",
-          "model"
-        ],
-        "properties": {
-          "model": {
-            "type": "string"
-          },
-          "stock": {
-            "type": "string"
-          },
-          "user_id": {
-            "type": "integer",
-            "format": "int32"
+            "example": "financiar186@gmail.com"
           }
         }
       },
@@ -2035,6 +2115,19 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token recibido en el link del mail de verificacion.",
+            "example": "3f9a1c...e07b"
           }
         }
       }
