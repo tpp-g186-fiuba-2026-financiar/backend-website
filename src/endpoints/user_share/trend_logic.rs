@@ -665,6 +665,65 @@ mod tests {
         assert_eq!(preferred_model(Some("unsupported")), "lstm-modal");
     }
 
+    #[test]
+    fn modal_url_prefers_env_overrides_and_falls_back_to_defaults() {
+        let previous_lstm = std::env::var("MODAL_LSTM_URL").ok();
+        let previous_transformer = std::env::var("MODAL_TRANSFORMER_URL").ok();
+        let previous_xgboost = std::env::var("MODAL_XGBOOST_URL").ok();
+        let previous_arima = std::env::var("MODAL_ARIMA_URL").ok();
+
+        std::env::set_var("MODAL_LSTM_URL", "https://custom-lstm.example");
+        std::env::set_var("MODAL_TRANSFORMER_URL", "https://custom-transformer.example");
+        std::env::set_var("MODAL_XGBOOST_URL", "https://custom-xgboost.example");
+        std::env::set_var("MODAL_ARIMA_URL", "https://custom-arima.example");
+
+        assert_eq!(modal_url("lstm-modal"), "https://custom-lstm.example");
+        assert_eq!(
+            modal_url("transformer-modal"),
+            "https://custom-transformer.example"
+        );
+        assert_eq!(modal_url("xgboost-modal"), "https://custom-xgboost.example");
+        assert_eq!(modal_url("arima-modal"), "https://custom-arima.example");
+        assert_eq!(modal_url("unknown-model"), "https://custom-lstm.example");
+
+        std::env::remove_var("MODAL_LSTM_URL");
+        std::env::remove_var("MODAL_TRANSFORMER_URL");
+        std::env::remove_var("MODAL_XGBOOST_URL");
+        std::env::remove_var("MODAL_ARIMA_URL");
+
+        assert_eq!(modal_url("lstm-modal"), DEFAULT_LSTM_URL);
+        assert_eq!(modal_url("transformer-modal"), DEFAULT_TRANSFORMER_URL);
+        assert_eq!(modal_url("xgboost-modal"), DEFAULT_XGBOOST_URL);
+        assert_eq!(modal_url("arima-modal"), DEFAULT_ARIMA_URL);
+
+        if let Some(value) = previous_lstm {
+            std::env::set_var("MODAL_LSTM_URL", value);
+        }
+        if let Some(value) = previous_transformer {
+            std::env::set_var("MODAL_TRANSFORMER_URL", value);
+        }
+        if let Some(value) = previous_xgboost {
+            std::env::set_var("MODAL_XGBOOST_URL", value);
+        }
+        if let Some(value) = previous_arima {
+            std::env::set_var("MODAL_ARIMA_URL", value);
+        }
+    }
+
+    #[test]
+    fn unavailable_payload_and_preparation_signal_are_consistent() {
+        let payload = unavailable("GGAL", "todavia no hay un modelo entrenado", false);
+        assert_eq!(payload["ticker"], "GGAL");
+        assert_eq!(payload["available"], false);
+        assert_eq!(payload["retryable"], false);
+        assert_eq!(payload["reason"], "todavia no hay un modelo entrenado");
+        assert!(needs_preparation(&payload));
+
+        let other = unavailable("GGAL", "No se pudo contactar a Modal", true);
+        assert!(!needs_preparation(&other));
+        assert_eq!(other["retryable"], true);
+    }
+
     #[tokio::test]
     async fn selected_modal_model_is_returned_with_its_prediction() {
         let base = start_stub().await;
