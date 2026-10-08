@@ -140,7 +140,27 @@ mod tests {
     fn validates_ticker_format() {
         assert!(is_valid_ticker("GGAL"));
         assert!(is_valid_ticker("BRK.B"));
+        assert!(is_valid_ticker("gGal"));
+        assert!(is_valid_ticker("A.B.C"));
+        assert!(is_valid_ticker("123"));
         assert!(!is_valid_ticker(""));
+        assert!(!is_valid_ticker(" "));
         assert!(!is_valid_ticker("INVALID-TICKER"));
+        assert!(!is_valid_ticker("INVALID_TICKER"));
+        assert!(!is_valid_ticker("..."));
+        assert!(!is_valid_ticker(&"A".repeat(21)));
+    }
+
+    #[test]
+    fn rejects_unsupported_models_and_rejects_empty_or_malformed_tickers() {
+        assert!(is_allowed_model("arima-modal"));
+        assert!(is_allowed_model("transformer-modal"));
+        assert!(!is_allowed_model("unknown-modal"));
+        assert!(!is_allowed_model(""));
+        assert!(!is_allowed_model("lstm"));
+        assert!(!is_valid_ticker("A B"));
+        assert!(!is_valid_ticker("_INVALID"));
+        assert!(!is_valid_ticker("-"));
+        assert!(!is_valid_ticker("."));
     }
 }
