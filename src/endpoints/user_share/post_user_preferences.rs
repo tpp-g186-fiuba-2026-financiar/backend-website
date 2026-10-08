@@ -158,9 +158,36 @@ mod tests {
         assert!(!is_allowed_model("unknown-modal"));
         assert!(!is_allowed_model(""));
         assert!(!is_allowed_model("lstm"));
+        assert!(!is_allowed_model("LSTM-MODAL"));
         assert!(!is_valid_ticker("A B"));
         assert!(!is_valid_ticker("_INVALID"));
         assert!(!is_valid_ticker("-"));
         assert!(!is_valid_ticker("."));
+    }
+
+    #[test]
+    fn model_validation_covers_all_supported_variants() {
+        for model in [
+            "arima-modal",
+            "lstm-modal",
+            "transformer-modal",
+            "xgboost-modal",
+        ] {
+            assert!(is_allowed_model(model), "model {model} should be allowed");
+        }
+
+        for model in [
+            "",
+            "arima",
+            "lstm",
+            "transformer",
+            "xgboost",
+            "random-modal",
+            "arima-modal ",
+            " lstm-modal",
+            "model-xgboost",
+        ] {
+            assert!(!is_allowed_model(model), "model {model} should be rejected");
+        }
     }
 }
