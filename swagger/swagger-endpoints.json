@@ -668,6 +668,50 @@
         ]
       }
     },
+    "/user/preferences": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveUserPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Preference saved for the authenticated user and stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveUserPreferenceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid stock ticker or unsupported model"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares": {
       "get": {
         "tags": [
@@ -915,7 +959,7 @@
         "operationId": "handler",
         "responses": {
           "200": {
-            "description": "Trend prediction (Modal) for each stock declared by the authenticated user",
+            "description": "Trend prediction from each stock's preferred model, or lstm-modal by default",
             "content": {
               "application/json": {
                 "schema": {
@@ -1827,6 +1871,43 @@
           "email": {
             "type": "string",
             "example": "financiar186@gmail.com"
+          }
+        }
+      },
+      "SaveUserPreferenceRequest": {
+        "type": "object",
+        "required": [
+          "stock",
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "example": "lstm-modal"
+          },
+          "stock": {
+            "type": "string",
+            "example": "GGAL"
+          }
+        }
+      },
+      "SaveUserPreferenceResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "stock",
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "stock": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
