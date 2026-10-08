@@ -84,26 +84,7 @@ pub async fn send_trend_alert(
         new = alert.new_condition,
     );
 
-    let email = Message::builder()
-        .from(
-            format!("{} <{}>", config.from_name, config.from_email)
-                .parse()
-                .map_err(|err| format!("From invalido: {err}"))?,
-        )
-        .to(format!("{to_name} <{to_email}>")
-            .parse()
-            .map_err(|err| format!("Destinatario invalido: {err}"))?)
-        .subject(subject)
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)
-        .map_err(|err| format!("No se pudo armar el mail: {err}"))?;
-
-    let transport = config.transport()?;
-    transport
-        .send(email)
-        .await
-        .map(|_| ())
-        .map_err(|err| format!("Fallo el envio SMTP: {err}"))
+    send_plain_text(config, to_email, to_name, subject, body).await
 }
 
 /// Una linea de tenencia dentro del reporte semanal (ver `src::reports`).
@@ -168,6 +149,17 @@ pub async fn send_weekly_report(
         total_value = report.total_current_value,
     );
 
+    send_plain_text(config, to_email, to_name, subject, body).await
+}
+
+/// Arma y envia un mail de texto plano usando la configuracion SMTP.
+async fn send_plain_text(
+    config: &MailConfig,
+    to_email: &str,
+    to_name: &str,
+    subject: String,
+    body: String,
+) -> Result<(), String> {
     let email = Message::builder()
         .from(
             format!("{} <{}>", config.from_name, config.from_email)
@@ -188,6 +180,23 @@ pub async fn send_weekly_report(
         .await
         .map(|_| ())
         .map_err(|err| format!("Fallo el envio SMTP: {err}"))
+}
+
+pub async fn send_email_verification(
+    config: &MailConfig,
+    to_email: &str,
+    to_name: &str,
+    verification_link: &str,
+) -> Result<(), String> {
+    let subject = "FinanciAr: verifica tu cuenta".to_string();
+    let body = format!(
+        "Hola {to_name},\n\n\
+        Gracias por registrarte en FinanciAr. Para activar tu cuenta, ingresa al siguiente link:\n\n\
+        {verification_link}\n\n\
+        El link vence en 24 horas. Si no creaste una cuenta en FinanciAr, podes ignorar este mail."
+    );
+
+    send_plain_text(config, to_email, to_name, subject, body).await
 }
 
 #[cfg(test)]

@@ -8,6 +8,9 @@ use serde_json::json;
 use sqlx::PgPool;
 use utoipa::ToSchema;
 
+use crate::endpoints::user::email_verification::token::{
+    dispatch_verification_email, store_new_token,
+};
 use crate::endpoints::user::registration::validators::{
     email_validator::EmailValidator, password_validator::PasswordValidator, Validator,
 };
@@ -37,7 +40,7 @@ pub struct RegisterUserResponse {
     path = "/register",
     request_body = RegisterUserRequest,
     responses(
-        (status = 200, description = "User registered successfully", body = RegisterUserResponse, example = json!({
+        (status = 200, description = "User registered successfully. A verification email is sent and the account can't log in until it is verified (see /verify-email)", body = RegisterUserResponse, example = json!({
             "code": 200,
             "message": "User registered successfully"
         })),
@@ -195,6 +198,18 @@ pub async fn handler(
         }
     }
 
+    let verification_token = match store_new_token(&mut *transaction, user_id).await {
+        Ok(token) => token,
+        Err(err) => {
+            tracing::error!("Failed to store email verification token: {}", err);
+            // transaction drops here -> user insert is rolled back too
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the user."
+            }));
+        }
+    };
+
     if let Err(err) = transaction.commit().await {
         tracing::error!("Failed to commit registration transaction: {}", err);
         return axum::response::Json(json!({
@@ -203,7 +218,14 @@ pub async fn handler(
         }));
     }
 
-    // --- 4. Success ---
+    // --- 4. Verification email (the account can't log in until it's verified) ---
+    dispatch_verification_email(
+        payload.email.trim().to_string(),
+        payload.full_name.clone(),
+        verification_token,
+    );
+
+    // --- 5. Success ---
     axum::response::Json(json!({
         "code": 200,
         "message": "User registered successfully"

@@ -121,6 +121,11 @@ async fn create_user(state: &AppState, email: &str) -> (i32, String) {
         }),
     )
     .await;
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(email)
+        .execute(&state.pool)
+        .await
+        .expect("mark email as verified");
     let login = post_json(
         &app,
         "/login",

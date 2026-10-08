@@ -31,6 +31,12 @@ use crate::endpoints::share::get_logic as share_get_logic;
 use crate::endpoints::share::get_sector as share_get_sector;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::delete_logic as user_delete_logic;
+use crate::endpoints::user::email_verification::resend_logic::{
+    self as email_verification_resend_logic, ResendVerificationRequest,
+};
+use crate::endpoints::user::email_verification::verify_logic::{
+    self as email_verification_verify_logic, EmailVerificationResponse, VerifyEmailRequest,
+};
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
 use crate::endpoints::user::registration::registration_logic::{
@@ -99,6 +105,8 @@ impl Modify for SecurityAddon {
         endpoints::hello::handler,
         endpoints::user::registration::registration_logic::handler,
         endpoints::user::login_logic::handler,
+        endpoints::user::email_verification::verify_logic::handler,
+        endpoints::user::email_verification::resend_logic::handler,
         endpoints::user::get_user_logic::handler,
         endpoints::user::delete_logic::handler,
         endpoints::user::two_factor::two_factor_logic::setup,
@@ -129,6 +137,9 @@ impl Modify for SecurityAddon {
             RegisterUserResponse,
             LoginUserRequest,
             LoginUserResponse,
+            VerifyEmailRequest,
+            ResendVerificationRequest,
+            EmailVerificationResponse,
             TwoFactorCodeRequest,
             GetUserResponse,
             CreateShareRequest,
@@ -179,6 +190,14 @@ pub fn app_with_state(
         .route("/hello", get(endpoints::hello::handler))
         .route("/health", get(endpoints::health::handler))
         .route("/register", post(registration_logic::handler))
+        .route(
+            "/verify-email",
+            post(email_verification_verify_logic::handler),
+        )
+        .route(
+            "/verify-email/resend",
+            post(email_verification_resend_logic::handler),
+        )
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/{ticker}/sector", get(share_get_sector::handler))
         .route("/shares/update", get(share_update_logic::handler))
