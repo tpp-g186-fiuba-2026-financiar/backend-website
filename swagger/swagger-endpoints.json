@@ -9,6 +9,68 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/forgot-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta generica: el mail se manda solo si la cuenta existe y no se mando otro en el ultimo minuto. El link vence en 1 hora (ver /reset-password)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "If an account exists for that email, a password reset email was sent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Email vacio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 400,
+                  "message": "Email is required"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -235,6 +297,80 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reset-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Contrasena actualizada; el token queda invalidado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "Password updated successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token invalido, vencido o ya usado; o contrasena que no cumple los requisitos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "examples": {
+                  "Invalid Token": {
+                    "summary": "Triggered when the token is unknown, expired or already used",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid or expired reset token"
+                    }
+                  },
+                  "Weak Password": {
+                    "summary": "Triggered when password requirements are not met",
+                    "value": {
+                      "code": 400,
+                      "message": "Password must be at least 8 characters long"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
                 },
                 "example": {
                   "code": 500,
@@ -1457,6 +1593,18 @@
           }
         }
       },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cuenta_ejemplo@gmail.com"
+          }
+        }
+      },
       "GetUserResponse": {
         "type": "object",
         "required": [
@@ -1750,6 +1898,23 @@
           "volatility_forecast": {}
         }
       },
+      "PasswordResetResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "PnlResponse": {
         "type": "object",
         "required": [
@@ -1871,6 +2036,25 @@
           "email": {
             "type": "string",
             "example": "financiar186@gmail.com"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "properties": {
+          "new_password": {
+            "type": "string",
+            "description": "Nueva contrasena. Mismas reglas que en el registro.",
+            "example": "NewStrongPassword123!"
+          },
+          "token": {
+            "type": "string",
+            "description": "Token recibido en el link del mail de reseteo.",
+            "example": "3f9a1c...e07b"
           }
         }
       },
