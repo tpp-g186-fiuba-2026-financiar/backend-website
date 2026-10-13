@@ -199,6 +199,23 @@ pub async fn send_email_verification(
     send_plain_text(config, to_email, to_name, subject, body).await
 }
 
+pub async fn send_password_reset(
+    config: &MailConfig,
+    to_email: &str,
+    to_name: &str,
+    reset_link: &str,
+) -> Result<(), String> {
+    let subject = "FinanciAr: restablece tu contrasena".to_string();
+    let body = format!(
+        "Hola {to_name},\n\n\
+        Recibimos un pedido para restablecer la contrasena de tu cuenta de FinanciAr. Para elegir una nueva, ingresa al siguiente link:\n\n\
+        {reset_link}\n\n\
+        El link vence en 1 hora y solo se puede usar una vez. Si no pediste este cambio, podes ignorar este mail: tu contrasena actual no se modifica."
+    );
+
+    send_plain_text(config, to_email, to_name, subject, body).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
