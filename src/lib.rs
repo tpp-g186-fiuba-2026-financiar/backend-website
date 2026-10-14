@@ -39,6 +39,12 @@ use crate::endpoints::user::email_verification::verify_logic::{
 };
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
+use crate::endpoints::user::password_reset::forgot_logic::{
+    self as password_reset_forgot_logic, ForgotPasswordRequest,
+};
+use crate::endpoints::user::password_reset::reset_logic::{
+    self as password_reset_reset_logic, PasswordResetResponse, ResetPasswordRequest,
+};
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
 };
@@ -107,6 +113,8 @@ impl Modify for SecurityAddon {
         endpoints::user::login_logic::handler,
         endpoints::user::email_verification::verify_logic::handler,
         endpoints::user::email_verification::resend_logic::handler,
+        endpoints::user::password_reset::forgot_logic::handler,
+        endpoints::user::password_reset::reset_logic::handler,
         endpoints::user::get_user_logic::handler,
         endpoints::user::delete_logic::handler,
         endpoints::user::two_factor::two_factor_logic::setup,
@@ -140,6 +148,9 @@ impl Modify for SecurityAddon {
             VerifyEmailRequest,
             ResendVerificationRequest,
             EmailVerificationResponse,
+            ForgotPasswordRequest,
+            ResetPasswordRequest,
+            PasswordResetResponse,
             TwoFactorCodeRequest,
             GetUserResponse,
             CreateShareRequest,
@@ -198,6 +209,11 @@ pub fn app_with_state(
             "/verify-email/resend",
             post(email_verification_resend_logic::handler),
         )
+        .route(
+            "/forgot-password",
+            post(password_reset_forgot_logic::handler),
+        )
+        .route("/reset-password", post(password_reset_reset_logic::handler))
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/{ticker}/sector", get(share_get_sector::handler))
         .route("/shares/update", get(share_update_logic::handler))

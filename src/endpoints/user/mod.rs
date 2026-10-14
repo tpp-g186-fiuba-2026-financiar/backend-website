@@ -2,6 +2,7 @@ pub mod delete_logic;
 pub mod email_verification;
 pub mod get_user_logic;
 pub mod login_logic;
+pub mod password_reset;
 pub mod registration;
 pub mod two_factor;
 pub mod update_risk_profile_logic;
