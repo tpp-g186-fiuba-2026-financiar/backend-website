@@ -113,7 +113,7 @@ pub async fn handler(
     let tickers = match tickers {
         Ok(rows) => rows.into_iter().map(|(ticker,)| ticker).collect::<Vec<_>>(),
         Err(err) => {
-            tracing::error!("Failed to list tickers for trends: {}", err);
+            tracing::error!("No se pudieron listar los tickers para tendencias: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -145,7 +145,10 @@ pub async fn handler(
             })
             .collect::<HashMap<_, _>>(),
         Err(err) => {
-            tracing::error!("Failed to load user stock model preferences: {}", err);
+            tracing::error!(
+                "No se pudieron cargar las preferencias de modelo del usuario: {}",
+                err
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

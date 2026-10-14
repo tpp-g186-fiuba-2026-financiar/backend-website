@@ -37,7 +37,10 @@ pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
     let ready = match super::model_catalog::ready_tickers().await {
         Ok(ready) => ready,
         Err(error) => {
-            tracing::error!("Failed to list model-ready tickers: {}", error);
+            tracing::error!(
+                "No se pudieron listar los tickers con modelo listo: {}",
+                error
+            );
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(
@@ -68,7 +71,7 @@ pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
             (StatusCode::OK, Json(json!({ "shares": shares })))
         }
         Err(err) => {
-            tracing::error!("Failed to list all shares: {}", err);
+            tracing::error!("No se pudieron listar las acciones: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

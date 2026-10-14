@@ -45,7 +45,7 @@ pub async fn create_pool(database_url: &str) -> PgPool {
     .await;
 
     if let Err(e) = query {
-        tracing::error!("Failed to update expired investing profiles: {}", e);
+        tracing::error!("No se pudieron actualizar los perfiles de riesgo vencidos: {}", e);
         return Err(e);
     }
 

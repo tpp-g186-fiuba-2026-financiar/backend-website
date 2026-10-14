@@ -14,6 +14,7 @@ use crate::endpoints::user::email_verification::token::{
 use crate::endpoints::user::registration::validators::{
     email_validator::EmailValidator, password_validator::PasswordValidator, Validator,
 };
+use crate::observability::json_with_body_code;
 
 #[derive(Deserialize, ToSchema)]
 pub struct RegisterUserRequest {
@@ -81,6 +82,14 @@ pub struct RegisterUserResponse {
 pub async fn handler(
     State(pool): State<PgPool>,
     axum::Json(payload): axum::Json<RegisterUserRequest>,
+) -> axum::response::Response {
+    // HTTP 200 con el codigo real en el body: se marca para el log de acceso
+    json_with_body_code(register(pool, payload).await.0)
+}
+
+async fn register(
+    pool: PgPool,
+    payload: RegisterUserRequest,
 ) -> axum::response::Json<serde_json::Value> {
     // --- 1. Validation ---
     let validators: Vec<Box<dyn Validator>> =
@@ -88,6 +97,7 @@ pub async fn handler(
 
     for validator in validators {
         if let Err(err) = validator.validate(&payload) {
+            tracing::info!("Registro rechazado por validacion: {}", err);
             return axum::response::Json(json!({
                 "code": 400,
                 "message": err
@@ -113,6 +123,7 @@ pub async fn handler(
 
     match existing_user_result {
         Ok(Some(_)) => {
+            tracing::info!("Registro rechazado: ya existe un usuario con ese email");
             return axum::response::Json(json!({
                 "code": 409,
                 "message": "User already exists for that email!"
@@ -120,7 +131,10 @@ pub async fn handler(
         }
         Ok(None) => {}
         Err(err) => {
-            tracing::error!("Database query failed during existence check: {}", err);
+            tracing::error!(
+                "Fallo la consulta de usuario existente en el registro: {}",
+                err
+            );
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
@@ -131,7 +145,7 @@ pub async fn handler(
     let hashed_password = match hash_password(&payload.password) {
         Ok(hash) => hash,
         Err(err) => {
-            tracing::error!("Failed to hash password: {}", err);
+            tracing::error!("No se pudo hashear la contrasena: {}", err);
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "Failed to process user credentials."
@@ -143,7 +157,7 @@ pub async fn handler(
     let mut transaction = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start database transaction: {}", err);
+            tracing::error!("No se pudo iniciar la transaccion del registro: {}", err);
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
@@ -167,7 +181,7 @@ pub async fn handler(
     let user_id = match user_id_result {
         Ok(id) => id,
         Err(err) => {
-            tracing::error!("Failed to insert new user: {}", err);
+            tracing::error!("No se pudo insertar el usuario: {}", err);
             // transaction drops here -> rolled back automatically
             return axum::response::Json(json!({
                 "code": 500,
@@ -189,7 +203,7 @@ pub async fn handler(
         .await;
 
         if let Err(err) = insert_risk_profile_result {
-            tracing::error!("Failed to insert risk profile: {}", err);
+            tracing::error!(user_id, "No se pudo insertar el perfil de riesgo: {}", err);
             // transaction drops here -> user insert is rolled back too
             return axum::response::Json(json!({
                 "code": 500,
@@ -201,7 +215,11 @@ pub async fn handler(
     let verification_token = match store_new_token(&mut *transaction, user_id).await {
         Ok(token) => token,
         Err(err) => {
-            tracing::error!("Failed to store email verification token: {}", err);
+            tracing::error!(
+                user_id,
+                "No se pudo guardar el token de verificacion de email: {}",
+                err
+            );
             // transaction drops here -> user insert is rolled back too
             return axum::response::Json(json!({
                 "code": 500,
@@ -211,7 +229,11 @@ pub async fn handler(
     };
 
     if let Err(err) = transaction.commit().await {
-        tracing::error!("Failed to commit registration transaction: {}", err);
+        tracing::error!(
+            user_id,
+            "No se pudo commitear la transaccion del registro: {}",
+            err
+        );
         return axum::response::Json(json!({
             "code": 500,
             "message": "An unexpected error occurred while saving the user."
@@ -226,6 +248,7 @@ pub async fn handler(
     );
 
     // --- 5. Success ---
+    tracing::info!(user_id, "Usuario registrado");
     axum::response::Json(json!({
         "code": 200,
         "message": "User registered successfully"

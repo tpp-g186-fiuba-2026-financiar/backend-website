@@ -227,7 +227,7 @@ pub async fn handler(
         Ok(rows) => rows,
         Err(err) => {
             tracing::error!(
-                "Failed to load share operations for balance history: {}",
+                "No se pudieron cargar las operaciones para el historico de balance: {}",
                 err
             );
             return internal_error();
@@ -270,11 +270,15 @@ pub async fn handler(
                 tickers.insert(ticker, (build_checkpoints(ops), history));
             }
             Ok((ticker, Err(err))) => {
-                tracing::error!("Failed to fetch price history for {}: {:?}", ticker, err);
+                tracing::error!(
+                    "No se pudo obtener el historico de precios de {}: {:?}",
+                    ticker,
+                    err
+                );
                 return bad_gateway(&ticker);
             }
             Err(join_err) => {
-                tracing::error!("Price-history task panicked: {}", join_err);
+                tracing::error!("Panic en la tarea de historico de precios: {}", join_err);
                 return internal_error();
             }
         }
@@ -285,7 +289,7 @@ pub async fn handler(
     let timeline = match build_daily_timeline(&tickers, earliest_day, today_day) {
         Ok(timeline) => timeline,
         Err(err) => {
-            tracing::error!("Failed to build balance history timeline: {:?}", err);
+            tracing::error!("No se pudo armar el historico de balance: {:?}", err);
             return (
                 StatusCode::BAD_GATEWAY,
                 Json(json!({

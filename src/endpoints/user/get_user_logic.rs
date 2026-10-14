@@ -77,7 +77,7 @@ pub async fn handler(
     .fetch_optional(&pool)
     .await
     .unwrap_or_else(|e| {
-        tracing::error!("Database query failed during /user lookup: {}", e);
+        tracing::error!("Fallo la consulta del usuario en /user: {}", e);
         None
     })
     .map(|row| (Some(row.risk_profile), row.has_to_redo_risk_profile))
@@ -107,7 +107,7 @@ pub async fn handler(
             })),
         ),
         Err(err) => {
-            tracing::error!("Database query failed during /user lookup: {}", err);
+            tracing::error!("Fallo la consulta del usuario en /user: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

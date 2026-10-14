@@ -53,7 +53,7 @@ pub async fn create(
     match result {
         Ok((id,)) => (StatusCode::CREATED, Json(json!({ "id": id }))).into_response(),
         Err(err) => {
-            tracing::error!("Failed to create retro card: {}", err);
+            tracing::error!("[Retro] No se pudo crear la tarjeta: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "code": 500, "message": "No se pudo crear la tarjeta" })),
@@ -85,7 +85,7 @@ pub async fn delete(
             .into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
-            tracing::error!("Failed to delete retro card: {}", err);
+            tracing::error!("[Retro] No se pudo borrar la tarjeta {}: {}", id, err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "code": 500, "message": "No se pudo borrar la tarjeta" })),

@@ -87,7 +87,7 @@ pub async fn setup(
             )
         }
         Err(err) => {
-            tracing::error!("Failed to load 2FA state: {}", err);
+            tracing::error!("No se pudo cargar el estado del 2FA: {}", err);
             return internal_error();
         }
     }
@@ -99,7 +99,7 @@ pub async fn setup(
     ) {
         (Ok(url), Ok(qr)) => (url, qr),
         (Err(err), _) | (_, Err(err)) => {
-            tracing::error!("Failed to build TOTP enrollment: {}", err);
+            tracing::error!("No se pudo armar el alta de TOTP: {}", err);
             return internal_error();
         }
     };
@@ -112,7 +112,7 @@ pub async fn setup(
         .execute(&pool)
         .await
     {
-        tracing::error!("Failed to store TOTP secret: {}", err);
+        tracing::error!("No se pudo guardar el secreto TOTP: {}", err);
         return internal_error();
     }
 
@@ -162,7 +162,7 @@ pub async fn enable(
             )
         }
         Err(err) => {
-            tracing::error!("Failed to load 2FA state: {}", err);
+            tracing::error!("No se pudo cargar el estado del 2FA: {}", err);
             return internal_error();
         }
     };
@@ -184,7 +184,7 @@ pub async fn enable(
             })),
         ),
         Err(err) => {
-            tracing::error!("Failed to enable 2FA: {}", err);
+            tracing::error!("No se pudo activar el 2FA: {}", err);
             internal_error()
         }
     }
@@ -225,7 +225,7 @@ pub async fn disable(
             )
         }
         Err(err) => {
-            tracing::error!("Failed to load 2FA state: {}", err);
+            tracing::error!("No se pudo cargar el estado del 2FA: {}", err);
             return internal_error();
         }
     };
@@ -249,7 +249,7 @@ pub async fn disable(
             })),
         ),
         Err(err) => {
-            tracing::error!("Failed to disable 2FA: {}", err);
+            tracing::error!("No se pudo desactivar el 2FA: {}", err);
             internal_error()
         }
     }

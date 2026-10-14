@@ -86,7 +86,7 @@ pub async fn handler(
             (StatusCode::OK, Json(json!({ "shares": shares })))
         }
         Err(err) => {
-            tracing::error!("Failed to list shares: {}", err);
+            tracing::error!("No se pudieron listar las acciones del usuario: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

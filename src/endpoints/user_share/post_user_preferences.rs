@@ -88,7 +88,10 @@ pub async fn handler(
         )
             .into_response(),
         Err(err) => {
-            tracing::error!("Failed to save user stock model preference: {}", err);
+            tracing::error!(
+                "No se pudo guardar la preferencia de modelo del usuario: {}",
+                err
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

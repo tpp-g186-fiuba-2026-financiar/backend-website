@@ -73,7 +73,7 @@ pub async fn handler(
                 .into_response();
         }
         Err(err) => {
-            tracing::error!("Failed to look up share for deletion: {}", err);
+            tracing::error!(share_id, "No se pudo buscar la accion a borrar: {}", err);
             return internal_error();
         }
     };
@@ -85,7 +85,7 @@ pub async fn handler(
         Ok(price) => price,
         Err(err) => {
             tracing::error!(
-                "Failed to resolve current price for {} on delete: {:?}",
+                "No se pudo obtener el precio actual de {} al borrar: {:?}",
                 ticker,
                 err
             );
@@ -106,7 +106,11 @@ pub async fn handler(
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start transaction for share deletion: {}", err);
+            tracing::error!(
+                share_id,
+                "No se pudo iniciar la transaccion para borrar la accion: {}",
+                err
+            );
             return internal_error();
         }
     };
@@ -141,17 +145,25 @@ pub async fn handler(
             )
             .await
             {
-                tracing::error!("Failed to record sell operation: {}", err);
+                tracing::error!(
+                    share_id,
+                    "No se pudo registrar la operacion de venta: {}",
+                    err
+                );
                 return internal_error();
             }
             if let Err(err) = tx.commit().await {
-                tracing::error!("Failed to commit share deletion: {}", err);
+                tracing::error!(
+                    share_id,
+                    "No se pudo commitear el borrado de la accion: {}",
+                    err
+                );
                 return internal_error();
             }
             StatusCode::NO_CONTENT.into_response()
         }
         Err(err) => {
-            tracing::error!("Failed to delete share: {}", err);
+            tracing::error!(share_id, "No se pudo borrar la accion: {}", err);
             internal_error()
         }
     }

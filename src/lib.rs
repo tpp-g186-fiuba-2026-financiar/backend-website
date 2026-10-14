@@ -4,6 +4,7 @@ pub mod configuration;
 pub mod database;
 pub mod endpoints;
 pub mod mail;
+pub mod observability;
 pub mod reports;
 
 #[cfg(test)]
@@ -331,11 +332,13 @@ pub fn app_with_state(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
-    Router::new()
+    let router = Router::new()
         .route("/login", post(login_logic::handler))
         .layer(session_layer)
         .merge(normal_routes)
         .merge(protected)
         .merge(retro_routes)
-        .with_state(state)
+        .with_state(state);
+
+    observability::with_http_logging(router)
 }

@@ -79,7 +79,7 @@ pub async fn handler(
     let hashed_password = match hash_password(&payload.new_password) {
         Ok(hash) => hash,
         Err(err) => {
-            tracing::error!("Failed to hash password during reset: {}", err);
+            tracing::error!("No se pudo hashear la contrasena en el reseteo: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -117,7 +117,7 @@ pub async fn handler(
         ),
         Ok(_) => invalid_token(),
         Err(err) => {
-            tracing::error!("Failed to reset password: {}", err);
+            tracing::error!("No se pudo resetear la contrasena: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

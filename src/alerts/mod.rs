@@ -202,7 +202,11 @@ async fn notify_subscribers(
         if let Err(err) = send_trend_alert(mail_config, &email, &full_name, &alert).await {
             // Un mail que falla no debe frenar el resto ni la actualizacion
             // de la cache de tendencias.
-            tracing::error!("[Alerts] No se pudo enviar mail a {}: {}", email, err);
+            tracing::error!(
+                "[Alerts] No se pudo enviar mail a {}: {}",
+                crate::observability::mask_email(&email),
+                err
+            );
         }
     }
 

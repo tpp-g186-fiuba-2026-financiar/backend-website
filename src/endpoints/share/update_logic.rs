@@ -31,7 +31,7 @@ pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
             let body: serde_json::Value = match res.json().await {
                 Ok(b) => b,
                 Err(err) => {
-                    tracing::error!("Failed to parse data collector response: {}", err);
+                    tracing::error!("Respuesta invalida del data collector: {}", err);
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(
@@ -56,7 +56,7 @@ pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
             }
         }
         Err(err) => {
-            tracing::error!("Failed to reach data collector: {}", err);
+            tracing::error!("No se pudo contactar al data collector: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "code": 500, "message": "Could not reach data collector." })),
@@ -77,7 +77,7 @@ pub async fn handler(State(pool): State<PgPool>) -> impl IntoResponse {
 
         match result {
             Ok(r) => added += r.rows_affected() as usize,
-            Err(err) => tracing::warn!("Failed to insert ticker {}: {}", ticker, err),
+            Err(err) => tracing::warn!("No se pudo insertar el ticker {}: {}", ticker, err),
         }
     }
 

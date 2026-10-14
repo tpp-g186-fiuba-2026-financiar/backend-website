@@ -38,7 +38,10 @@ pub async fn create(
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start transaction for retro archive: {}", err);
+            tracing::error!(
+                "[Retro] No se pudo iniciar la transaccion para archivar: {}",
+                err
+            );
             return server_error("No se pudo archivar");
         }
     };
@@ -55,7 +58,7 @@ pub async fn create(
     {
         Ok(rows) => rows,
         Err(err) => {
-            tracing::error!("Failed to read retro board for archiving: {}", err);
+            tracing::error!("[Retro] No se pudo leer el tablero para archivar: {}", err);
             return server_error("No se pudo archivar");
         }
     };
@@ -71,7 +74,7 @@ pub async fn create(
     let sprint_number = match sprint::advance(&mut tx).await {
         Ok(n) => n,
         Err(err) => {
-            tracing::error!("Failed to advance sprint counter: {}", err);
+            tracing::error!("[Retro] No se pudo avanzar el contador de sprint: {}", err);
             return server_error("No se pudo archivar");
         }
     };
@@ -99,7 +102,7 @@ pub async fn create(
     let archive_id = match insert_result {
         Ok((id,)) => id,
         Err(err) => {
-            tracing::error!("Failed to insert retro archive: {}", err);
+            tracing::error!("[Retro] No se pudo guardar el archivo: {}", err);
             return server_error("No se pudo archivar");
         }
     };
@@ -108,12 +111,15 @@ pub async fn create(
         .execute(&mut *tx)
         .await
     {
-        tracing::error!("Failed to clear retro board after archiving: {}", err);
+        tracing::error!(
+            "[Retro] No se pudo limpiar el tablero despues de archivar: {}",
+            err
+        );
         return server_error("No se pudo archivar");
     }
 
     if let Err(err) = tx.commit().await {
-        tracing::error!("Failed to commit retro archive transaction: {}", err);
+        tracing::error!("[Retro] No se pudo commitear el archivado: {}", err);
         return server_error("No se pudo archivar");
     }
 
@@ -136,7 +142,10 @@ pub async fn undo(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start transaction for retro undo: {}", err);
+            tracing::error!(
+                "[Retro] No se pudo iniciar la transaccion para deshacer: {}",
+                err
+            );
             return server_error("No se pudo deshacer");
         }
     };
@@ -162,7 +171,10 @@ pub async fn undo(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
                 .into_response();
         }
         Err(err) => {
-            tracing::error!("Failed to load last retro archive for undo: {}", err);
+            tracing::error!(
+                "[Retro] No se pudo cargar el ultimo archivo para deshacer: {}",
+                err
+            );
             return server_error("No se pudo deshacer");
         }
     };
@@ -185,7 +197,10 @@ pub async fn undo(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
                     .execute(&mut *tx)
                     .await
             {
-                tracing::error!("Failed to restore retro card on undo: {}", err);
+                tracing::error!(
+                    "[Retro] No se pudo restaurar una tarjeta al deshacer: {}",
+                    err
+                );
                 return server_error("No se pudo deshacer");
             }
         }
@@ -196,20 +211,23 @@ pub async fn undo(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
         .execute(&mut *tx)
         .await
     {
-        tracing::error!("Failed to delete retro archive on undo: {}", err);
+        tracing::error!("[Retro] No se pudo borrar el archivo al deshacer: {}", err);
         return server_error("No se pudo deshacer");
     }
 
     let sprint_number = match sprint::rewind(&mut tx).await {
         Ok(n) => n,
         Err(err) => {
-            tracing::error!("Failed to rewind sprint counter: {}", err);
+            tracing::error!(
+                "[Retro] No se pudo retroceder el contador de sprint: {}",
+                err
+            );
             return server_error("No se pudo deshacer");
         }
     };
 
     if let Err(err) = tx.commit().await {
-        tracing::error!("Failed to commit retro undo transaction: {}", err);
+        tracing::error!("[Retro] No se pudo commitear el deshacer: {}", err);
         return server_error("No se pudo deshacer");
     }
 
@@ -242,7 +260,7 @@ pub async fn list(State(pool): State<PgPool>, headers: HeaderMap) -> impl IntoRe
             (StatusCode::OK, Json(json!({ "archives": archives }))).into_response()
         }
         Err(err) => {
-            tracing::error!("Failed to list retro archives: {}", err);
+            tracing::error!("[Retro] No se pudieron listar los archivos: {}", err);
             server_error("No se pudieron listar los archivos")
         }
     }
@@ -283,7 +301,7 @@ pub async fn get_one(
         )
             .into_response(),
         Err(err) => {
-            tracing::error!("Failed to load retro archive {}: {}", id, err);
+            tracing::error!("[Retro] No se pudo cargar el archivo {}: {}", id, err);
             server_error("No se pudo cargar el archivo")
         }
     }

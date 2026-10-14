@@ -104,10 +104,7 @@ pub async fn handler(
             })),
         ),
         Err(err) => {
-            tracing::error!(
-                "Database query failed during /user/risk-profile update: {}",
-                err
-            );
+            tracing::error!("Fallo la actualizacion del perfil de riesgo: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

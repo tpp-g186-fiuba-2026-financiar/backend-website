@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgExecutor, PgPool};
 
 use crate::mail::{self, MailConfig};
+use crate::observability::{is_local_link, mask_email};
 
 /// Horas de validez del link de verificacion.
 pub const TOKEN_TTL_HOURS: i64 = 24;
@@ -98,16 +99,25 @@ pub async fn store_new_token_for_resend(
 pub fn dispatch_verification_email(email: String, full_name: String, token: String) {
     let link = verification_link(&token);
     let Some(config) = MailConfig::from_env() else {
-        tracing::warn!(
-            "[EmailVerification] SMTP_HOST no esta configurado: no se envia el mail a {email}. Link de verificacion: {link}"
-        );
+        let destino = mask_email(&email);
+        if is_local_link(&link) {
+            tracing::warn!(
+                "[EmailVerification] SMTP_HOST no esta configurado: no se envia el mail a {destino}. Link de verificacion: {link}"
+            );
+        } else {
+            // Fuera de local el link no va al log: con el token cualquiera podria usarlo
+            tracing::error!(
+                "[EmailVerification] SMTP_HOST no esta configurado: no se pudo enviar el mail de verificacion a {destino}"
+            );
+        }
         return;
     };
 
     tokio::spawn(async move {
+        let destino = mask_email(&email);
         if let Err(err) = mail::send_email_verification(&config, &email, &full_name, &link).await {
             tracing::error!(
-                "[EmailVerification] No se pudo enviar el mail de verificacion a {email}: {err}"
+                "[EmailVerification] No se pudo enviar el mail de verificacion a {destino}: {err}"
             );
         }
     });

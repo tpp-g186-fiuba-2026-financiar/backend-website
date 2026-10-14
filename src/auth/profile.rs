@@ -25,7 +25,9 @@ pub async fn require_profile(
     // require_auth runs before us and puts AuthUser here. If it's missing,
     // the router is wired wrong — fail loud in logs, generic 500 to the client.
     let Some(auth_user) = request.extensions().get::<AuthUser>().cloned() else {
-        tracing::error!("require_profile ran without AuthUser in extensions — check layer order");
+        tracing::error!(
+            "require_profile corrio sin AuthUser en las extensions: revisar el orden de los layers"
+        );
         return internal_error();
     };
 
@@ -61,7 +63,7 @@ pub async fn require_profile(
             None,
         ),
         Err(err) => {
-            tracing::error!("risk profile lookup failed: {}", err);
+            tracing::error!("Fallo la consulta del perfil de riesgo: {}", err);
             internal_error()
         }
     }

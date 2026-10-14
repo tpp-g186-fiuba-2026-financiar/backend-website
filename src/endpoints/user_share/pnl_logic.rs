@@ -103,7 +103,7 @@ pub async fn handler(
     let rows = match rows {
         Ok(rows) => rows,
         Err(err) => {
-            tracing::error!("Failed to list shares for pnl: {}", err);
+            tracing::error!("No se pudieron listar las acciones para el PnL: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

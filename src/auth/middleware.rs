@@ -31,17 +31,21 @@ pub async fn require_auth(
 ) -> Response {
     let token = match extract_bearer_token(&request) {
         Some(t) => t,
-        None => return unauthorized("Missing or malformed Authorization header"),
+        None => {
+            tracing::debug!("Request sin header Authorization valido");
+            return unauthorized("Missing or malformed Authorization header");
+        }
     };
 
     let claims = match jwt_config.decode_token(token) {
         Ok(claims) => claims,
         Err(err) => {
-            tracing::warn!("JWT validation failed: {}", err);
+            tracing::warn!("JWT invalido o vencido: {}", err);
             return unauthorized("Invalid or expired token");
         }
     };
 
+    crate::observability::record_user_id(claims.sub);
     request.extensions_mut().insert(AuthUser::from(claims));
     next.run(request).await
 }

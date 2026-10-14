@@ -105,7 +105,7 @@ fn respond_delete(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) ->
             .into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
-            tracing::error!("Failed to delete alert subscription: {}", err);
+            tracing::error!("No se pudo borrar la suscripcion a alertas: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

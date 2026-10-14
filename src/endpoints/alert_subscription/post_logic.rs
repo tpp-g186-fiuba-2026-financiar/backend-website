@@ -82,7 +82,7 @@ pub async fn subscribe_ticker(
                 .into_response();
         }
         Err(err) => {
-            tracing::error!("Failed to look up share for alert subscription: {}", err);
+            tracing::error!(%ticker, "No se pudo buscar la accion para suscribir alertas: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -121,7 +121,7 @@ pub async fn subscribe_ticker(
         )
             .into_response(),
         Err(err) => {
-            tracing::error!("Failed to insert alert subscription: {}", err);
+            tracing::error!(%ticker, "No se pudo guardar la suscripcion a alertas: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -187,7 +187,10 @@ pub async fn subscribe_portfolio(
         )
             .into_response(),
         Err(err) => {
-            tracing::error!("Failed to insert portfolio alert subscription: {}", err);
+            tracing::error!(
+                "No se pudo guardar la suscripcion a alertas de la cartera: {}",
+                err
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

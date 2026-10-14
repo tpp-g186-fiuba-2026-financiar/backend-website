@@ -141,7 +141,7 @@ pub async fn handler(
             );
         }
         Err(error) => {
-            tracing::error!("Failed to validate model-ready ticker: {}", error);
+            tracing::error!(%ticker, "No se pudo validar si el ticker tiene modelo listo: {}", error);
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({ "code": 503, "message": "No se pudo validar el ticker." })),
@@ -180,7 +180,7 @@ pub async fn handler(
             Ok(price) => price,
             Err(err) => {
                 tracing::error!(
-                    "Failed to resolve current price for {} on create: {:?}",
+                    "No se pudo obtener el precio actual de {} al crear: {:?}",
                     ticker,
                     err
                 );
@@ -201,7 +201,7 @@ pub async fn handler(
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start transaction for share creation: {}", err);
+            tracing::error!(%ticker, "No se pudo iniciar la transaccion para crear la accion: {}", err);
             return internal_error();
         }
     };
@@ -232,7 +232,7 @@ pub async fn handler(
             );
         }
         Err(err) => {
-            tracing::error!("Failed to insert share: {}", err);
+            tracing::error!(%ticker, "No se pudo insertar la accion: {}", err);
             return internal_error();
         }
     };
@@ -247,12 +247,12 @@ pub async fn handler(
     )
     .await
     {
-        tracing::error!("Failed to record buy operation: {}", err);
+        tracing::error!(%ticker, "No se pudo registrar la operacion de compra: {}", err);
         return internal_error();
     }
 
     if let Err(err) = tx.commit().await {
-        tracing::error!("Failed to commit share creation: {}", err);
+        tracing::error!(%ticker, "No se pudo commitear la creacion de la accion: {}", err);
         return internal_error();
     }
 

@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 
 use crate::auth::jwt::JwtConfig;
 use crate::endpoints::user::two_factor::totp::verify_code;
+use crate::observability::json_with_body_code;
 
 /// (password_hash, id, totp_secret, two_factor_enabled, email_verified)
 type UserLoginRow = (String, i32, Option<String>, bool, bool);
@@ -75,6 +76,16 @@ pub async fn handler(
     State(pool): State<PgPool>,
     State(jwt_config): State<JwtConfig>,
     axum::Json(payload): axum::Json<LoginUserRequest>,
+) -> axum::response::Response {
+    // HTTP 200 con el codigo real en el body: se marca para el log de acceso
+    json_with_body_code(login(session, pool, jwt_config, payload).await.0)
+}
+
+async fn login(
+    session: Session,
+    pool: PgPool,
+    jwt_config: JwtConfig,
+    payload: LoginUserRequest,
 ) -> axum::response::Json<serde_json::Value> {
     if payload.email.trim().is_empty() || payload.password.is_empty() {
         return axum::response::Json(json!({
@@ -98,7 +109,10 @@ pub async fn handler(
                 match sqlx::FromRow::from_row(&row) {
                     Ok(data) => data,
                     Err(err) => {
-                        tracing::error!("Failed to parse user data during login: {}", err);
+                        tracing::error!(
+                            "No se pudieron leer los datos del usuario en el login: {}",
+                            err
+                        );
                         return axum::response::Json(json!({
                             "code": 500,
                             "message": "An unexpected error occurred. Please try again later."
@@ -108,13 +122,14 @@ pub async fn handler(
             (password_hashed, id, secret, enabled, verified)
         }
         Ok(None) => {
+            tracing::warn!("Login fallido: no existe un usuario con ese email");
             return axum::response::Json(json!({
                 "code": 401,
                 "message": "Invalid email or password"
             }));
         }
         Err(err) => {
-            tracing::error!("Database query failed during login lookup: {}", err);
+            tracing::error!("Fallo la consulta del usuario en el login: {}", err);
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
@@ -123,6 +138,7 @@ pub async fn handler(
     };
 
     if !verify_password(&payload.password, &stored_hash) {
+        tracing::warn!(user_id = serial_id, "Login fallido: contrasena incorrecta");
         return axum::response::Json(json!({
             "code": 401,
             "message": "Invalid email or password"
@@ -130,6 +146,7 @@ pub async fn handler(
     }
 
     if !verified {
+        tracing::info!(user_id = serial_id, "Login rechazado: email sin verificar");
         return axum::response::Json(json!({
             "code": 403,
             "message": "Email not verified",
@@ -141,6 +158,7 @@ pub async fn handler(
         let secret = totp_secret.unwrap_or_default();
         match payload.totp_code.as_deref().map(str::trim) {
             None | Some("") => {
+                tracing::debug!(user_id = serial_id, "Login pide codigo 2FA");
                 return axum::response::Json(json!({
                     "code": 401,
                     "message": "Two-factor code required",
@@ -149,6 +167,7 @@ pub async fn handler(
             }
             Some(code) => {
                 if !verify_code(&secret, email, code) {
+                    tracing::warn!(user_id = serial_id, "Login fallido: codigo 2FA invalido");
                     return axum::response::Json(json!({
                         "code": 401,
                         "message": "Invalid two-factor code",
@@ -162,7 +181,7 @@ pub async fn handler(
     let token = match jwt_config.encode_token(serial_id, email) {
         Ok(t) => t,
         Err(err) => {
-            tracing::error!("Failed to issue JWT for user {}: {}", serial_id, err);
+            tracing::error!(user_id = serial_id, "No se pudo emitir el JWT: {}", err);
             return axum::response::Json(json!({
                 "code": 500,
                 "message": "An unexpected error occurred. Please try again later."
@@ -171,13 +190,18 @@ pub async fn handler(
     };
 
     if let Err(err) = session.insert("user_id", serial_id).await {
-        tracing::error!("Failed to create session during login: {}", err);
+        tracing::error!(
+            user_id = serial_id,
+            "No se pudo crear la sesion en el login: {}",
+            err
+        );
         return axum::response::Json(json!({
             "code": 500,
             "message": "An unexpected error occurred. Please try again later."
         }));
     }
 
+    tracing::info!(user_id = serial_id, "Login exitoso");
     axum::response::Json(json!({
         "code": 200,
         "message": "Login successful",
@@ -189,7 +213,10 @@ fn verify_password(password: &str, stored_hash: &str) -> bool {
     let parsed_hash = match PasswordHash::new(stored_hash) {
         Ok(hash) => hash,
         Err(err) => {
-            tracing::error!("Stored password hash is not parseable: {}", err);
+            tracing::error!(
+                "El hash de contrasena guardado no se puede parsear: {}",
+                err
+            );
             return false;
         }
     };

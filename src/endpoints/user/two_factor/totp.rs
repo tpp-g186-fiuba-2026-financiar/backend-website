@@ -44,7 +44,7 @@ pub fn verify_code(secret_base32: &str, email: &str, code: &str) -> bool {
     match build(secret_base32, email) {
         Ok(totp) => totp.check_current(code).unwrap_or(false),
         Err(err) => {
-            tracing::error!("{}", err);
+            tracing::error!("No se pudo armar el TOTP para verificar el codigo: {}", err);
             false
         }
     }

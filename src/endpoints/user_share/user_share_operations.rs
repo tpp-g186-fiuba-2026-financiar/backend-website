@@ -116,7 +116,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
                     Ok(history) => history.to_vec(),
                     Err(err) => {
                         tracing::error!(
-                            "Skipping seed for user {} / {}: {:?}",
+                            "Se saltea el seed del usuario {} / {}: {:?}",
                             row.user_id,
                             row.ticker,
                             err
@@ -128,7 +128,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
                     Ok(Some(price)) => price,
                     Ok(None) => {
                         tracing::error!(
-                            "Skipping seed for user {} / {}: no historical price before {}",
+                            "Se saltea el seed del usuario {} / {}: no hay precio historico antes de {}",
                             row.user_id,
                             row.ticker,
                             row.created_at
@@ -137,7 +137,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
                     }
                     Err(err) => {
                         tracing::error!(
-                            "Skipping seed for user {} / {}: {:?}",
+                            "Se saltea el seed del usuario {} / {}: {:?}",
                             row.user_id,
                             row.ticker,
                             err
@@ -151,7 +151,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
         let mut tx = match pool.begin().await {
             Ok(tx) => tx,
             Err(err) => {
-                tracing::error!("Failed to start seed transaction: {}", err);
+                tracing::error!("No se pudo iniciar la transaccion del seed: {}", err);
                 continue;
             }
         };
@@ -168,7 +168,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
         .await
         {
             tracing::error!(
-                "Failed to seed operation for user {} / {}: {}",
+                "No se pudo hacer el seed de la operacion del usuario {} / {}: {}",
                 row.user_id,
                 row.ticker,
                 err

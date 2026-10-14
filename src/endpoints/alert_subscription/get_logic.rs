@@ -67,7 +67,7 @@ pub async fn handler(
             )
         }
         Err(err) => {
-            tracing::error!("Failed to list alert subscriptions: {}", err);
+            tracing::error!("No se pudieron listar las suscripciones a alertas: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

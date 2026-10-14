@@ -2,6 +2,7 @@ use sqlx::PgPool;
 
 use crate::endpoints::user::email_verification::token::{generate_token, hash_token};
 use crate::mail::{self, MailConfig};
+use crate::observability::{is_local_link, mask_email};
 
 /// Minutos de validez del link de reseteo
 pub const TOKEN_TTL_MINUTES: i64 = 60;
@@ -47,16 +48,25 @@ pub async fn store_new_token(pool: &PgPool, user_id: i32) -> Result<Option<Strin
 pub fn dispatch_password_reset_email(email: String, full_name: String, token: String) {
     let link = reset_link(&token);
     let Some(config) = MailConfig::from_env() else {
-        tracing::warn!(
-            "[PasswordReset] SMTP_HOST no esta configurado: no se envia el mail a {email}. Link de reseteo: {link}"
-        );
+        let destino = mask_email(&email);
+        if is_local_link(&link) {
+            tracing::warn!(
+                "[PasswordReset] SMTP_HOST no esta configurado: no se envia el mail a {destino}. Link de reseteo: {link}"
+            );
+        } else {
+            // Fuera de local el link no va al log: con el token cualquiera podria usarlo
+            tracing::error!(
+                "[PasswordReset] SMTP_HOST no esta configurado: no se pudo enviar el mail de reseteo a {destino}"
+            );
+        }
         return;
     };
 
     tokio::spawn(async move {
+        let destino = mask_email(&email);
         if let Err(err) = mail::send_password_reset(&config, &email, &full_name, &link).await {
             tracing::error!(
-                "[PasswordReset] No se pudo enviar el mail de reseteo a {email}: {err}"
+                "[PasswordReset] No se pudo enviar el mail de reseteo a {destino}: {err}"
             );
         }
     });

@@ -47,7 +47,7 @@ pub async fn handler(State(pool): State<PgPool>, headers: HeaderMap) -> impl Int
     let current_sprint = match sprint::current(&pool).await {
         Ok(n) => n,
         Err(err) => {
-            tracing::error!("Failed to load current sprint: {}", err);
+            tracing::error!("[Retro] No se pudo cargar el sprint actual: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "code": 500, "message": "No se pudo cargar el tablero" })),
@@ -63,7 +63,7 @@ pub async fn handler(State(pool): State<PgPool>, headers: HeaderMap) -> impl Int
             (StatusCode::OK, Json(board)).into_response()
         }
         Err(err) => {
-            tracing::error!("Failed to load retro board: {}", err);
+            tracing::error!("[Retro] No se pudo cargar el tablero: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "code": 500, "message": "No se pudo cargar el tablero" })),

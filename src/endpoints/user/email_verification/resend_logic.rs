@@ -60,7 +60,7 @@ pub async fn handler(
         }
         Ok(None) => {}
         Err(err) => {
-            tracing::error!("Failed to resend verification email: {}", err);
+            tracing::error!("No se pudo reenviar el mail de verificacion: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

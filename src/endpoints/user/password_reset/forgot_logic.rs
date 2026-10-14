@@ -71,7 +71,7 @@ pub async fn handler(
             dispatch_password_reset_email(email.to_string(), full_name, token);
         }
         Err(err) => {
-            tracing::error!("Failed to start password reset: {}", err);
+            tracing::error!("No se pudo iniciar el reseteo de contrasena: {}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

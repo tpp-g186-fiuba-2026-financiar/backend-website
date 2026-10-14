@@ -175,7 +175,11 @@ async fn send_weekly_reports(
 
         if let Err(err) = send_weekly_report(mail_config, &email, &full_name, &report).await {
             // Un mail que falla no debe frenar el resto.
-            tracing::error!("[WeeklyReport] No se pudo enviar mail a {}: {}", email, err);
+            tracing::error!(
+                "[WeeklyReport] No se pudo enviar mail a {}: {}",
+                crate::observability::mask_email(&email),
+                err
+            );
         }
     }
 
@@ -418,7 +422,7 @@ mod tests {
         .await;
 
         if let Err(err) = insert_profile_result {
-            tracing::error!("Failed to insert risk profile: {}", err);
+            tracing::error!("No se pudo insertar el perfil de riesgo: {}", err);
             return;
         }
 

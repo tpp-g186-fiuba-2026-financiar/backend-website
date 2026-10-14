@@ -2,7 +2,10 @@ use axum::http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     HeaderValue, Method,
 };
-use backend_website::{app, configuration::config::Config, database::db, ApiDoc};
+use backend_website::{
+    app, configuration::config::Config, database::db, observability,
+    observability::REQUEST_ID_HEADER, ApiDoc,
+};
 use dotenvy::dotenv;
 use std::{env, net::SocketAddr};
 use time::Duration;
@@ -15,9 +18,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    // Primero el .env, asi el subscriber toma su RUST_LOG / LOG_FORMAT
+    dotenv().ok();
+    observability::init_tracing();
 
     // Trick to auto-generate the swagger json without starting the server
     if std::env::var("EXPORT_OPENAPI").is_ok() {
@@ -27,11 +30,9 @@ async fn main() {
         tokio::fs::write("swagger-endpoints.json", openapi_json)
             .await
             .expect("Failed to write swagger-endpoints.json");
-        tracing::info!("OpenAPI documentation exported to swagger-endpoints.json");
+        tracing::info!("Documentacion OpenAPI exportada a swagger-endpoints.json");
         return; // Exit without starting the Axum server
     }
-
-    dotenv().ok();
 
     let cfg = Config::from_env();
     let pool = db::create_pool(&cfg.database_url).await;
@@ -57,7 +58,7 @@ async fn main() {
     if !allowed_origins.contains(&production_frontend) {
         allowed_origins.push(production_frontend);
     }
-    println!("Allowed origins: {:?}", allowed_origins);
+    tracing::info!("Origenes permitidos por CORS: {:?}", allowed_origins);
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
         .allow_methods([
@@ -67,7 +68,8 @@ async fn main() {
             Method::PATCH,
             Method::DELETE,
         ])
-        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE]);
+        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE, REQUEST_ID_HEADER])
+        .expose_headers([REQUEST_ID_HEADER]);
 
     let session_store = PostgresStore::new(pool.clone());
     session_store
@@ -94,21 +96,24 @@ async fn main() {
         .await
         .expect("[Backend Website] Failed to bind to address");
 
-    tracing::info!("listening on {addr}");
+    tracing::info!("Escuchando en {addr}");
 
     tokio::spawn(async move {
         // Lucas disclaimer: This delete is only visual, the actual deletion is handled by the tower_sessions library.
         // This is just to make sure are deleted from the table and we keep a clean database.
         loop {
             tokio::time::sleep(std::time::Duration::from_hours(1)).await;
-            tracing::info!("[Session Cleanup] Deleting expired sessions...");
+            tracing::info!("[Session Cleanup] Borrando sesiones vencidas...");
             session_store.delete_expired().await.unwrap_or_else(|err| {
-                tracing::error!("Failed to delete expired sessions: {}", err);
+                tracing::error!(
+                    "[Session Cleanup] No se pudieron borrar las sesiones vencidas: {}",
+                    err
+                );
             });
             /*db::update_expired_investing_profiles(&pool)
             .await
             .unwrap_or_else(|err| {
-                tracing::error!("Failed to update expired investing profiles: {}", err);
+                tracing::error!("No se pudieron actualizar los perfiles de riesgo vencidos: {}", err);
             });*/
         }
     });

@@ -73,7 +73,7 @@ pub async fn handler(
         ),
         Ok(_) => invalid_token(),
         Err(err) => {
-            tracing::error!("Failed to verify email token: {}", err);
+            tracing::error!("No se pudo verificar el token de email: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({

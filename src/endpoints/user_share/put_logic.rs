@@ -108,7 +108,11 @@ pub async fn handler(
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(err) => {
-            tracing::error!("Failed to start transaction for share update: {}", err);
+            tracing::error!(
+                share_id,
+                "No se pudo iniciar la transaccion para actualizar la accion: {}",
+                err
+            );
             return internal_error();
         }
     };
@@ -141,7 +145,11 @@ pub async fn handler(
             );
         }
         Err(err) => {
-            tracing::error!("Failed to load share for update: {}", err);
+            tracing::error!(
+                share_id,
+                "No se pudo cargar la accion a actualizar: {}",
+                err
+            );
             return internal_error();
         }
     };
@@ -155,7 +163,7 @@ pub async fn handler(
                 Ok(price) => price,
                 Err(err) => {
                     tracing::error!(
-                        "Failed to resolve current price for {} on partial buy: {:?}",
+                        "No se pudo obtener el precio actual de {} en la compra parcial: {:?}",
                         ticker,
                         err
                     );
@@ -169,7 +177,7 @@ pub async fn handler(
             Ok(price) => price,
             Err(err) => {
                 tracing::error!(
-                    "Failed to resolve current price for {} on partial sell: {:?}",
+                    "No se pudo obtener el precio actual de {} en la venta parcial: {:?}",
                     ticker,
                     err
                 );
@@ -198,7 +206,7 @@ pub async fn handler(
     let (id, user_id, quantity, entry_price, created_at) = match result {
         Ok(row) => row,
         Err(err) => {
-            tracing::error!("Failed to update share: {}", err);
+            tracing::error!(share_id, "No se pudo actualizar la accion: {}", err);
             return internal_error();
         }
     };
@@ -214,13 +222,21 @@ pub async fn handler(
         )
         .await
         {
-            tracing::error!("Failed to record partial buy/sell operation: {}", err);
+            tracing::error!(
+                share_id,
+                "No se pudo registrar la compra/venta parcial: {}",
+                err
+            );
             return internal_error();
         }
     }
 
     if let Err(err) = tx.commit().await {
-        tracing::error!("Failed to commit share update: {}", err);
+        tracing::error!(
+            share_id,
+            "No se pudo commitear la actualizacion de la accion: {}",
+            err
+        );
         return internal_error();
     }
 

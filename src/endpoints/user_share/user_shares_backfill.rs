@@ -7,12 +7,12 @@ pub async fn backfill_user_shares_handler(
 ) -> Result<Json<BackfillReport>, StatusCode> {
     let (entry_prices_updated, entry_prices_skipped) =
         backfill_entry_prices(&pool).await.map_err(|err| {
-            tracing::error!("entry_price backfill failed: {}", err);
+            tracing::error!("Fallo el backfill de entry_price: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     let operations_seeded = seed_existing_holdings(&pool).await.map_err(|err| {
-        tracing::error!("ledger seed failed: {}", err);
+        tracing::error!("Fallo el seed del ledger: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -57,7 +57,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
     for row in rows {
         let Some(price) = row.entry_price else {
             tracing::error!(
-                "Skipping seed for user {} / share {}: entry_price still NULL",
+                "Se saltea el seed del usuario {} / accion {}: entry_price sigue en NULL",
                 row.user_id,
                 row.share_id
             );
@@ -67,7 +67,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
         let mut tx = match pool.begin().await {
             Ok(tx) => tx,
             Err(err) => {
-                tracing::error!("Failed to start seed transaction: {}", err);
+                tracing::error!("No se pudo iniciar la transaccion del seed: {}", err);
                 continue;
             }
         };
@@ -84,7 +84,7 @@ pub async fn seed_existing_holdings(pool: &PgPool) -> Result<usize, sqlx::Error>
         .await
         {
             tracing::error!(
-                "Failed to seed operation for user {} / share {}: {}",
+                "No se pudo hacer el seed de la operacion del usuario {} / accion {}: {}",
                 row.user_id,
                 row.share_id,
                 err
@@ -146,7 +146,11 @@ pub async fn backfill_entry_prices(pool: &PgPool) -> Result<(usize, usize), sqlx
         let history = match fetch_ticker_history(&ticker).await {
             Ok(history) => history.to_vec(),
             Err(err) => {
-                tracing::error!("Skipping entry_price backfill for {}: {:?}", ticker, err);
+                tracing::error!(
+                    "Se saltea el backfill de entry_price de {}: {:?}",
+                    ticker,
+                    err
+                );
                 skipped += rows.len();
                 continue;
             }
@@ -158,7 +162,7 @@ pub async fn backfill_entry_prices(pool: &PgPool) -> Result<(usize, usize), sqlx
                 Ok(Some(price)) => price,
                 other => {
                     tracing::error!(
-                        "No entry price for user {} / {}: {:?}",
+                        "Sin entry_price para el usuario {} / {}: {:?}",
                         row.user_id,
                         ticker,
                         other

@@ -127,7 +127,7 @@ pub async fn handler(
             .collect::<Vec<_>>(),
         Err(err) => {
             tracing::error!(
-                "Failed to list tenencias for portfolio recomendacion: {}",
+                "No se pudieron listar las tenencias para la recomendacion de cartera: {}",
                 err
             );
             return (
@@ -178,10 +178,19 @@ pub async fn handler(
         request = request.query(&query_params);
     }
 
-    println!("Request: {:?}", request);
+    tracing::debug!(
+        model = query.model.as_deref(),
+        cartera_ancla = query.cartera_ancla.as_deref(),
+        tenencias = payload.tenencias.len(),
+        "Pidiendo recomendacion de cartera a api-ml"
+    );
     let response = request.json(&payload).send().await;
-
-    println!("Response: {:?}", response);
+    if let Ok(res) = &response {
+        tracing::debug!(
+            status = res.status().as_u16(),
+            "api-ml respondio la recomendacion"
+        );
+    }
     match response {
         Ok(res) if res.status().is_success() => match res.json::<Value>().await {
             Ok(body) => (StatusCode::OK, Json(body)),

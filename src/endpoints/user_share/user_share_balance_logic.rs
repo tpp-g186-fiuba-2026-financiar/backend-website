@@ -265,7 +265,11 @@ fn price_error_detail(err: &PriceFetchError) -> String {
 
 fn bad_gateway_response(ticker: &str, err: &PriceFetchError) -> axum::response::Response {
     let detail = price_error_detail(err);
-    tracing::error!("Failed to fetch price data for {}: {}", ticker, detail);
+    tracing::error!(
+        "No se pudieron obtener los precios de {}: {}",
+        ticker,
+        detail
+    );
     (
         StatusCode::BAD_GATEWAY,
         Json(json!({
@@ -332,7 +336,10 @@ pub async fn handler(
     let rows = match rows {
         Ok(rows) => rows,
         Err(err) => {
-            tracing::error!("Failed to load user shares for portfolio balance: {}", err);
+            tracing::error!(
+                "No se pudieron cargar las acciones para el balance de la cartera: {}",
+                err
+            );
             return internal_error_response();
         }
     };
@@ -369,7 +376,7 @@ pub async fn handler(
             }
             Ok((ticker, Err(err))) => return bad_gateway_response(&ticker, &err),
             Err(join_err) => {
-                tracing::error!("Price-fetch task panicked: {}", join_err);
+                tracing::error!("Panic en la tarea de precios: {}", join_err);
                 return internal_error_response();
             }
         }
@@ -404,7 +411,7 @@ pub async fn handler(
                         // retried on the next call.
                         if let Err(err) = persist_entry_price(&pool, row.id, price).await {
                             tracing::error!(
-                                "Failed to persist backfilled entry_price for user_shares.id={}: {}",
+                                "No se pudo guardar el entry_price completado de user_shares.id={}: {}",
                                 row.id,
                                 err
                             );
