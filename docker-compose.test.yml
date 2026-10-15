@@ -32,13 +32,17 @@ services:
         condition: service_healthy
     command: >
       bash -c "
-      echo 'Installing sqlx-cli (will use cache on future runs)...' &&
-      cargo install sqlx-cli --no-default-features --features rustls,postgres || true &&
-      echo 'Running migrations on test database...' &&
-      cargo sqlx migrate run &&
+      echo 'Waiting for database to boot...' &&
+      export DATABASE_URL=postgres://test_user:test_password@db-test:5432/test_db &&
+      echo 'Installing sqlx-cli...' &&
+      cargo install sqlx-cli --no-default-features --features rustls,postgres --locked &&
+      echo 'Running migrations...' &&
+      sqlx migrate run --database-url postgres://test_user:test_password@db-test:5432/test_db &&
+      echo 'Preparing sqlx query cache...' &&
+      cargo sqlx prepare --database-url postgres://test_user:test_password@db-test:5432/test_db -- --all-targets &&
       echo 'Running tests...' &&
       cargo test
-      "
+      " 
     networks:
       - financiar_shared_network_test
 

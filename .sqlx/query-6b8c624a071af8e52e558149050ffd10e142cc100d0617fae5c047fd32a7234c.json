@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT risk_profile, (NOW() >= expires_at) AS has_to_redo_risk_profile\n        FROM user_investing_profiles\n        WHERE user_id = $1\n        ORDER BY created_at DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "risk_profile",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "has_to_redo_risk_profile",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "6b8c624a071af8e52e558149050ffd10e142cc100d0617fae5c047fd32a7234c"
+}

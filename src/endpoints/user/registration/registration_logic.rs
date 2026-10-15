@@ -8,6 +8,9 @@ use serde_json::json;
 use sqlx::PgPool;
 use utoipa::ToSchema;
 
+use crate::endpoints::user::email_verification::token::{
+    dispatch_verification_email, store_new_token,
+};
 use crate::endpoints::user::registration::validators::{
     email_validator::EmailValidator, password_validator::PasswordValidator, Validator,
 };
@@ -37,7 +40,7 @@ pub struct RegisterUserResponse {
     path = "/register",
     request_body = RegisterUserRequest,
     responses(
-        (status = 200, description = "User registered successfully", body = RegisterUserResponse, example = json!({
+        (status = 200, description = "User registered successfully. A verification email is sent and the account can't log in until it is verified (see /verify-email)", body = RegisterUserResponse, example = json!({
             "code": 200,
             "message": "User registered successfully"
         })),
@@ -92,7 +95,6 @@ pub async fn handler(
         }
     }
 
-    // Lucas comments: this can be easily be moved to a validators, not sure still how will be implemented yet.
     if let Some(ref profile) = payload.risk_profile {
         let valid_profiles = ["conservative", "moderate", "aggressive"];
         if !valid_profiles.contains(&profile.as_str()) {
@@ -116,7 +118,7 @@ pub async fn handler(
                 "message": "User already exists for that email!"
             }));
         }
-        Ok(None) => {} // User does not exist, proceed
+        Ok(None) => {}
         Err(err) => {
             tracing::error!("Database query failed during existence check: {}", err);
             return axum::response::Json(json!({
@@ -137,26 +139,91 @@ pub async fn handler(
         }
     };
 
-    let insert_result = sqlx::query(
+    // --- 3. User + risk profile in a single transaction ---
+    let mut transaction = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("Failed to start database transaction: {}", err);
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred. Please try again later."
+            }));
+        }
+    };
+
+    let user_id_result = sqlx::query_scalar!(
         r#"
-        INSERT INTO users (email, password_hash, full_name, risk_profile) 
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO users (email, password_hash, full_name)
+        VALUES ($1, $2, $3)
+        RETURNING id
         "#,
+        payload.email.trim(),
+        hashed_password,
+        payload.full_name
     )
-    .bind(payload.email.trim())
-    .bind(hashed_password)
-    .bind(payload.full_name)
-    .bind(payload.risk_profile)
-    .execute(&pool)
+    .fetch_one(&mut *transaction)
     .await;
 
-    if let Err(err) = insert_result {
-        tracing::error!("Failed to insert new user: {}", err);
+    let user_id = match user_id_result {
+        Ok(id) => id,
+        Err(err) => {
+            tracing::error!("Failed to insert new user: {}", err);
+            // transaction drops here -> rolled back automatically
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the user."
+            }));
+        }
+    };
+
+    if let Some(ref profile) = payload.risk_profile {
+        let insert_risk_profile_result = sqlx::query!(
+            r#"
+            INSERT INTO user_investing_profiles (user_id, risk_profile)
+            VALUES ($1, $2)
+            "#,
+            user_id,
+            profile
+        )
+        .execute(&mut *transaction)
+        .await;
+
+        if let Err(err) = insert_risk_profile_result {
+            tracing::error!("Failed to insert risk profile: {}", err);
+            // transaction drops here -> user insert is rolled back too
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the risk profile."
+            }));
+        }
+    }
+
+    let verification_token = match store_new_token(&mut *transaction, user_id).await {
+        Ok(token) => token,
+        Err(err) => {
+            tracing::error!("Failed to store email verification token: {}", err);
+            // transaction drops here -> user insert is rolled back too
+            return axum::response::Json(json!({
+                "code": 500,
+                "message": "An unexpected error occurred while saving the user."
+            }));
+        }
+    };
+
+    if let Err(err) = transaction.commit().await {
+        tracing::error!("Failed to commit registration transaction: {}", err);
         return axum::response::Json(json!({
             "code": 500,
             "message": "An unexpected error occurred while saving the user."
         }));
     }
+
+    // --- 4. Verification email (the account can't log in until it's verified) ---
+    dispatch_verification_email(
+        payload.email.trim().to_string(),
+        payload.full_name.clone(),
+        verification_token,
+    );
 
     // --- 5. Success ---
     axum::response::Json(json!({

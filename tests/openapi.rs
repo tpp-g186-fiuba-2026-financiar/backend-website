@@ -9,6 +9,8 @@ fn openapi_document_lists_the_public_endpoints() {
     for path in [
         "/login",
         "/register",
+        "/verify-email",
+        "/verify-email/resend",
         "/user",
         "/user/2fa/setup",
         "/user/2fa/enable",
@@ -19,4 +21,5 @@ fn openapi_document_lists_the_public_endpoints() {
     }
     assert!(doc["components"]["securitySchemes"]["bearer_auth"].is_object());
     assert!(doc["components"]["schemas"]["TwoFactorCodeRequest"].is_object());
+    assert!(doc["components"]["schemas"]["VerifyEmailRequest"].is_object());
 }

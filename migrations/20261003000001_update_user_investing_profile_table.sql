@@ -1,0 +1,1 @@
+INSERT INTO user_investing_profiles (user_id, risk_profile ) SELECT id, risk_profile FROM users;

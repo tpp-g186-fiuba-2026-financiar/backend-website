@@ -59,7 +59,7 @@ async fn post(app: &Router, uri: &str, token: Option<&str>, body: Value) -> (Sta
     )
 }
 
-async fn register_and_login(app: &Router, email: &str) -> String {
+async fn register_and_login(app: &Router, pool: &sqlx::PgPool, email: &str) -> String {
     let (status, _) = post(
         app,
         "/register",
@@ -73,6 +73,11 @@ async fn register_and_login(app: &Router, email: &str) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    sqlx::query("UPDATE users SET email_verified = TRUE WHERE email = $1")
+        .bind(email)
+        .execute(pool)
+        .await
+        .expect("mark email as verified");
     let (_, body) = post(
         app,
         "/login",
@@ -88,7 +93,7 @@ async fn register_and_login(app: &Router, email: &str) -> String {
 async fn two_factor_full_flow() {
     let (app, pool) = build_app().await;
     let email = unique_email();
-    let token = register_and_login(&app, &email).await;
+    let token = register_and_login(&app, &pool, &email).await;
 
     // Requiere autenticacion.
     let (status, _) = post(&app, "/user/2fa/setup", None, json!({})).await;
@@ -234,7 +239,7 @@ async fn two_factor_full_flow() {
 async fn disable_without_2fa_enabled_returns_400() {
     let (app, pool) = build_app().await;
     let email = unique_email();
-    let token = register_and_login(&app, &email).await;
+    let token = register_and_login(&app, &pool, &email).await;
 
     let (status, body) = post(
         &app,
@@ -256,7 +261,7 @@ async fn disable_without_2fa_enabled_returns_400() {
 async fn two_factor_endpoints_return_404_when_user_no_longer_exists() {
     let (app, pool) = build_app().await;
     let email = unique_email();
-    let token = register_and_login(&app, &email).await;
+    let token = register_and_login(&app, &pool, &email).await;
     sqlx::query("DELETE FROM users WHERE email = $1")
         .bind(&email)
         .execute(&pool)
@@ -274,7 +279,7 @@ async fn two_factor_endpoints_return_404_when_user_no_longer_exists() {
 async fn login_with_2fa_and_blank_code_asks_for_it() {
     let (app, pool) = build_app().await;
     let email = unique_email();
-    let token = register_and_login(&app, &email).await;
+    let token = register_and_login(&app, &pool, &email).await;
     let (_, setup) = post(&app, "/user/2fa/setup", Some(&token), json!({})).await;
     let secret = setup["secret"].as_str().unwrap().to_string();
     let code = totp::current_code(&secret, &email).unwrap();

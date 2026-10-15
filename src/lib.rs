@@ -24,9 +24,6 @@ use utoipa::{
 };
 
 use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
-use crate::endpoints::alert_subscription::get_logic::{
-    self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
-};
 use crate::endpoints::alert_subscription::post_logic::{
     self as alert_subscription_post_logic, AlertSubscriptionResponse,
 };
@@ -34,14 +31,27 @@ use crate::endpoints::share::get_logic as share_get_logic;
 use crate::endpoints::share::get_sector as share_get_sector;
 use crate::endpoints::share::update_logic as share_update_logic;
 use crate::endpoints::user::delete_logic as user_delete_logic;
+use crate::endpoints::user::email_verification::resend_logic::{
+    self as email_verification_resend_logic, ResendVerificationRequest,
+};
+use crate::endpoints::user::email_verification::verify_logic::{
+    self as email_verification_verify_logic, EmailVerificationResponse, VerifyEmailRequest,
+};
 use crate::endpoints::user::get_user_logic::{self, GetUserResponse};
 use crate::endpoints::user::login_logic::{self, LoginUserRequest, LoginUserResponse};
+use crate::endpoints::user::password_reset::forgot_logic::{
+    self as password_reset_forgot_logic, ForgotPasswordRequest,
+};
+use crate::endpoints::user::password_reset::reset_logic::{
+    self as password_reset_reset_logic, PasswordResetResponse, ResetPasswordRequest,
+};
 use crate::endpoints::user::registration::registration_logic::{
     self, RegisterUserRequest, RegisterUserResponse,
 };
 use crate::endpoints::user::two_factor::two_factor_logic::{
     self as two_factor_logic, TwoFactorCodeRequest,
 };
+use crate::endpoints::user_share::balance_history_logic;
 use crate::endpoints::user_share::compare_trend_logic::{
     self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
 };
@@ -57,16 +67,25 @@ use crate::endpoints::user_share::portfolio_logic as user_share_portfolio_logic;
 use crate::endpoints::user_share::post_logic::{
     self as user_share_post_logic, CreateShareRequest, CreateShareResponse,
 };
+use crate::endpoints::user_share::post_user_preferences::{
+    SaveUserPreferenceRequest, SaveUserPreferenceResponse,
+};
 use crate::endpoints::user_share::put_logic::{
     self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
 use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
 };
+use crate::endpoints::{
+    alert_subscription::get_logic::{
+        self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
+    },
+    user_share::user_shares_backfill,
+};
 use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
-use crate::{configuration::config::AppState, endpoints::user_share::balance_history_logic};
+use crate::{auth::profile::require_profile, configuration::config::AppState};
 
 pub struct SecurityAddon;
 
@@ -92,6 +111,10 @@ impl Modify for SecurityAddon {
         endpoints::hello::handler,
         endpoints::user::registration::registration_logic::handler,
         endpoints::user::login_logic::handler,
+        endpoints::user::email_verification::verify_logic::handler,
+        endpoints::user::email_verification::resend_logic::handler,
+        endpoints::user::password_reset::forgot_logic::handler,
+        endpoints::user::password_reset::reset_logic::handler,
         endpoints::user::get_user_logic::handler,
         endpoints::user::delete_logic::handler,
         endpoints::user::two_factor::two_factor_logic::setup,
@@ -99,6 +122,7 @@ impl Modify for SecurityAddon {
         endpoints::user::two_factor::two_factor_logic::disable,
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
+        endpoints::user_share::post_user_preferences::handler,
         endpoints::user_share::delete_logic::handler,
         endpoints::user_share::put_logic::handler,
         endpoints::user_share::trend_logic::handler,
@@ -121,10 +145,18 @@ impl Modify for SecurityAddon {
             RegisterUserResponse,
             LoginUserRequest,
             LoginUserResponse,
+            VerifyEmailRequest,
+            ResendVerificationRequest,
+            EmailVerificationResponse,
+            ForgotPasswordRequest,
+            ResetPasswordRequest,
+            PasswordResetResponse,
             TwoFactorCodeRequest,
             GetUserResponse,
             CreateShareRequest,
             CreateShareResponse,
+            SaveUserPreferenceRequest,
+            SaveUserPreferenceResponse,
             ListSharesResponse,
             ShareItem,
             UpdateShareRequest,
@@ -169,9 +201,26 @@ pub fn app_with_state(
         .route("/hello", get(endpoints::hello::handler))
         .route("/health", get(endpoints::health::handler))
         .route("/register", post(registration_logic::handler))
+        .route(
+            "/verify-email",
+            post(email_verification_verify_logic::handler),
+        )
+        .route(
+            "/verify-email/resend",
+            post(email_verification_resend_logic::handler),
+        )
+        .route(
+            "/forgot-password",
+            post(password_reset_forgot_logic::handler),
+        )
+        .route("/reset-password", post(password_reset_reset_logic::handler))
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/{ticker}/sector", get(share_get_sector::handler))
-        .route("/shares/update", get(share_update_logic::handler));
+        .route("/shares/update", get(share_update_logic::handler))
+        .route(
+            "/admin/user-shares/backfill",
+            post(user_shares_backfill::backfill_user_shares_handler),
+        );
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
     // (tarjetas anonimas a proposito), protegido por un PIN compartido
@@ -208,8 +257,8 @@ pub fn app_with_state(
             get(endpoints::retro::archive_logic::get_one),
         );
 
-    // Rutas protegidas por JWT (middleware)
-    let protected = Router::new()
+    // Rutas protegidas por auth pero que NO necesitan un profile (para que el usuario pueda crear su profile)
+    let auth_only = Router::new()
         .route(
             "/user",
             get(get_user_logic::handler).delete(user_delete_logic::handler),
@@ -217,6 +266,10 @@ pub fn app_with_state(
         .route(
             "/user/risk-profile",
             patch(update_risk_profile_logic::handler),
+        )
+        .route(
+            "/user/preferences",
+            post(endpoints::user_share::post_user_preferences::handler),
         )
         .route("/user/2fa/setup", post(two_factor_logic::setup))
         .route("/user/2fa/enable", post(two_factor_logic::enable))
@@ -228,7 +281,10 @@ pub fn app_with_state(
         .route(
             "/user/shares/{id}",
             put(user_share_put_logic::handler).delete(user_share_delete_logic::handler),
-        )
+        );
+
+    // Rutas protegidas por JWT (middleware)
+    let profile_gated = Router::new()
         .route("/user/shares/trends", get(user_share_trend_logic::handler))
         .route(
             "/user/shares/{ticker}/trends/compare",
@@ -265,6 +321,13 @@ pub fn app_with_state(
             "/user/shares/balance/history",
             get(balance_history_logic::handler),
         )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_profile,
+        ));
+
+    let protected = auth_only
+        .merge(profile_gated)
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body
