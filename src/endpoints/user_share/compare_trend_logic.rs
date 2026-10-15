@@ -233,7 +233,14 @@ async fn fetch_api_ml_local_models(
     api_ml_url: Option<&str>,
     ticker: &str,
 ) -> HashMap<String, Value> {
-    const LOCAL_MODEL_KEYS: [&str; 5] = ["lstm", "xgboost", "transformer", "arima", "macro"];
+    const LOCAL_MODEL_KEYS: [&str; 6] = [
+        "lstm",
+        "xgboost",
+        "transformer",
+        "arima",
+        "macro",
+        "contexto",
+    ];
     let Some(api_ml_url) = api_ml_url else {
         return LOCAL_MODEL_KEYS
             .into_iter()
