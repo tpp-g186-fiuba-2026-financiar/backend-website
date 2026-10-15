@@ -151,6 +151,20 @@ async fn send_post_preference(app: Router, token: &str, payload: Value) -> (Stat
     (status, json)
 }
 
+async fn send_delete_preference(app: Router, token: &str, stock: &str) -> StatusCode {
+    app.oneshot(
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/user/preferences/{stock}"))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap()
+    .status()
+}
+
 #[tokio::test]
 async fn setting_a_user_preference_returns_saved_values() {
     let state = setup().await;
@@ -170,6 +184,33 @@ async fn setting_a_user_preference_returns_saved_values() {
     assert_eq!(body["user_id"], user_id);
     assert_eq!(body["stock"], "GGAL");
     assert_eq!(body["model"], "transformer-modal");
+
+    cleanup_user(&state.pool, &email).await;
+}
+
+#[tokio::test]
+async fn deleting_a_user_preference_returns_not_found_when_repeated() {
+    let state = setup().await;
+    let email = unique_email("delete");
+    let token = register_and_login(&state, &email, "StrongPassword123!").await;
+    let user_id = get_user_id(&state.pool, &email).await;
+    sqlx::query("INSERT INTO user_preferences (user_id, stock, model) VALUES ($1, $2, $3)")
+        .bind(user_id)
+        .bind("GGAL")
+        .bind("lstm-modal")
+        .execute(&state.pool)
+        .await
+        .expect("seed user preference");
+
+    let app = build_app(state.clone()).await;
+    assert_eq!(
+        send_delete_preference(app.clone(), &token, "ggal").await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send_delete_preference(app, &token, "GGAL").await,
+        StatusCode::NOT_FOUND
+    );
 
     cleanup_user(&state.pool, &email).await;
 }
