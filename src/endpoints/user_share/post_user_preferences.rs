@@ -101,7 +101,7 @@ pub async fn handler(
     }
 }
 
-fn is_valid_ticker(stock: &str) -> bool {
+pub(super) fn is_valid_ticker(stock: &str) -> bool {
     !stock.is_empty()
         && stock.len() <= MAX_TICKER_LEN
         && stock
