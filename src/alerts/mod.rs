@@ -279,12 +279,14 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        // lets insert the user investing profile
-        let user_id: i32 = sqlx::query_scalar(
-            "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate') RETURNING id",
+        // El perfil se inserta aparte: antes el `RETURNING id` pisaba `user_id`
+        // con el id del PERFIL, que solo coincide con el del usuario por azar
+        // (con tests en paralelo las secuencias se desfasan y rompe la FK).
+        sqlx::query(
+            "INSERT INTO user_investing_profiles (user_id, risk_profile) VALUES ($1, 'moderate')",
         )
         .bind(user_id)
-        .fetch_one(&pool)
+        .execute(&pool)
         .await
         .unwrap();
 
