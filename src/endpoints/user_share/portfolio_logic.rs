@@ -7,6 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::PgPool;
+use std::time::Duration;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::auth::{middleware::AuthUser, profile::CurrentProfile};
@@ -34,9 +35,32 @@ pub struct PortfolioQuery {
     cartera_ancla: Option<String>,
 }
 
+/// Detalle Black-Litterman por ticker (se reenvia tal cual desde api-ml).
+#[derive(Serialize, ToSchema)]
+pub struct PortfolioDetalleItem {
+    pub ticker: String,
+    pub peso_actual: f64,
+    pub peso_recomendado: f64,
+    /// Retorno de equilibrio (prior)
+    pub pi: f64,
+    /// View del modelo (retorno diario esperado)
+    pub q: f64,
+    /// Incertidumbre de la view
+    pub omega: f64,
+    /// Retorno posterior Black-Litterman
+    pub mu_bl: f64,
+    pub horizon_days: i64,
+}
+
+/// El body de api-ml se reenvia tal cual; este schema documenta sus campos.
 #[derive(Serialize, ToSchema)]
 pub struct PortfolioRecomendacionResponse {
     pub pesos_recomendados: std::collections::HashMap<String, f64>,
+    pub detalle: Vec<PortfolioDetalleItem>,
+    /// Ticker -> motivo por el que quedo afuera de la optimizacion
+    pub tickers_excluidos: std::collections::HashMap<String, String>,
+    /// Estrategia de cartera ancla usada: propia | equal_weight | mercado
+    pub cartera_ancla: String,
 }
 
 #[utoipa::path(
@@ -46,10 +70,21 @@ pub struct PortfolioRecomendacionResponse {
     responses(
         (status = 200, description = "Pesos de cartera recomendados (Black-Litterman) para el usuario autenticado", body = PortfolioRecomendacionResponse, example = json!({
             "pesos_recomendados": {
-                "GGAL": 0.42,
-                "YPFD": 0.31,
-                "PAMP": 0.27
-            }
+                "GGAL": 0.58,
+                "YPFD": 0.42
+            },
+            "detalle": [{
+                "ticker": "GGAL",
+                "peso_actual": 0.5,
+                "peso_recomendado": 0.58,
+                "pi": 0.0004,
+                "q": 0.0011,
+                "omega": 0.00002,
+                "mu_bl": 0.0007,
+                "horizon_days": 5
+            }],
+            "tickers_excluidos": {"PAMP": "sin prediccion disponible"},
+            "cartera_ancla": "propia"
         })),
         (status = 400, description = "El usuario no tiene perfil de riesgo configurado", example = json!({
             "code": 400,
@@ -89,17 +124,7 @@ pub async fn handler(
     Extension(profile): Extension<CurrentProfile>,
     Query(query): Query<PortfolioQuery>,
 ) -> impl IntoResponse {
-    // Perfil de riesgo del usuario (mismo campo que expone GET /user).
-    /*let risk_profile = sqlx::query_as::<_, (Option<String>,)>(
-        r#"
-        SELECT risk_profile
-        FROM users
-        WHERE id = $1
-        "#,
-    )
-    .bind(auth_user.user_id)
-    .fetch_optional(&pool)
-    .await;*/
+    // Perfil de riesgo vigente (lo resuelve el middleware require_profile).
     let perfil_riesgo = profile.risk_profile.clone();
 
     // Tenencias del usuario (ticker + cantidad). Cartera vacia es valida:
@@ -159,7 +184,11 @@ pub async fn handler(
         tenencias,
     };
 
-    let mut request = reqwest::Client::new().post(format!(
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .expect("reqwest client");
+    let mut request = client.post(format!(
         "{}/portfolio/recomendacion",
         api_ml_url.trim_end_matches('/'),
     ));
@@ -178,10 +207,8 @@ pub async fn handler(
         request = request.query(&query_params);
     }
 
-    println!("Request: {:?}", request);
     let response = request.json(&payload).send().await;
 
-    println!("Response: {:?}", response);
     match response {
         Ok(res) if res.status().is_success() => match res.json::<Value>().await {
             Ok(body) => (StatusCode::OK, Json(body)),

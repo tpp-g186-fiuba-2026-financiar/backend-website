@@ -31,9 +31,9 @@ async fn historical(Path(ticker): Path<String>) -> impl IntoResponse {
             StatusCode::OK,
             Json(json!({
                 "data": [
-                    {"ts": 1_700_000_000_000_i64, "close_amount": "100.0"},
+                    {"ts": 1_700_000_000_000_i64, "open_amount": "99", "high_amount": "101", "low_amount": "98", "close_amount": "100.0", "volume": 10},
                     {"ts": 1_705_000_000_000_i64, "close_amount": "invalid"},
-                    {"ts": 1_710_000_000_000_i64, "close_amount": "125.5"}
+                    {"ts": 1_710_000_000_000_i64, "open_amount": "120", "high_amount": "126", "low_amount": "119", "close_amount": "125.5", "volume": 20}
                 ],
                 "status": 200,
                 "cached": false
@@ -147,6 +147,52 @@ async fn portfolio(Query(query): Query<HashMap<String, String>>) -> (StatusCode,
     )
 }
 
+async fn rate_series(Path(series): Path<String>) -> Json<Value> {
+    if series == "RESERVAS" {
+        return Json(
+            json!({"status": 500, "message": {"error": "Failed to fetch interest rate series"}}),
+        );
+    }
+    Json(json!({
+        "status": 200,
+        "series": series,
+        "data": [
+            {"series_id": series, "ts": 1_710_000_000_000_i64, "value": "4.25"},
+            {"series_id": series, "ts": 1_700_000_000_000_i64, "value": "4.0"}
+        ],
+        "cached": true
+    }))
+}
+
+async fn explain(Path(ticker): Path<String>) -> (StatusCode, Json<Value>) {
+    if ticker == "NOPE" {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": "sin artefacto para NOPE"})),
+        );
+    }
+    (
+        StatusCode::OK,
+        Json(json!({
+            "symbol": ticker,
+            "probability_up": 0.61,
+            "contributions": [{"feature": "rsi", "value": 55.0, "contribution": 0.02}]
+        })),
+    )
+}
+
+async fn signals_history(Query(query): Query<HashMap<String, String>>) -> Json<Value> {
+    Json(json!({"symbols": query.get("symbols"), "limit": query.get("limit"), "signals": []}))
+}
+
+async fn diagnostics() -> Json<Value> {
+    Json(json!({"models": {"xgboost": {"auc": 0.55}}}))
+}
+
+async fn stub_health() -> Json<Value> {
+    Json(json!({"status": "ok"}))
+}
+
 async fn start_stub() -> (String, StubState) {
     let state = StubState::default();
     let app = Router::new()
@@ -162,6 +208,13 @@ async fn start_stub() -> (String, StubState) {
         .route("/garch-ann", get(garch_ann_model))
         .route("/predict/trend/compare/{ticker}", get(local_models))
         .route("/portfolio/recomendacion", post(portfolio))
+        .route("/macro/argdatos/{series}", post(rate_series))
+        .route("/interest-rate/ar/{series}", post(rate_series))
+        .route("/interest-rate/us/{series}", post(rate_series))
+        .route("/predict/trend/xgboost/explain/{ticker}", get(explain))
+        .route("/signals/history", get(signals_history))
+        .route("/models/diagnostics", get(diagnostics))
+        .route("/health", get(stub_health))
         .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -211,6 +264,10 @@ async fn setup() -> (AppState, String, String) {
         .await
         .unwrap();
     sqlx::query("DELETE FROM ticker_trend_cache WHERE ticker = 'COVR'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ticker_compare_cache WHERE ticker = 'COVR'")
         .execute(&pool)
         .await
         .unwrap();
@@ -350,6 +407,23 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     assert_eq!(body["predictions"]["macro"]["available"], true);
     assert_eq!(body["predictions"]["contexto"]["signal"], "alza");
     assert_eq!(body["predictions"]["contexto"]["available"], true);
+    // El stub no tiene todos los modelos (xgboost local sin artefacto): queda
+    // guardada como incompleta, que igual se reusa por unos minutos.
+    let cached_complete: bool =
+        sqlx::query_scalar("SELECT complete FROM ticker_compare_cache WHERE ticker = 'COVR'")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    assert!(!cached_complete);
+    let (status, cached) = request(
+        app.clone(),
+        Method::GET,
+        "/user/shares/COVR/trends/compare",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(cached["predictions"], body["predictions"]);
 
     let (status, body) = request(
         app.clone(),
@@ -387,6 +461,139 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["prices"].as_array().unwrap().is_empty());
+
+    let (status, body) = request(
+        app.clone(),
+        Method::GET,
+        "/user/shares/covr/candles?limit=1",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ticker"], "COVR");
+    assert_eq!(body["candles"].as_array().unwrap().len(), 1);
+    assert_eq!(body["candles"][0]["close"], 125.5);
+    assert_eq!(body["candles"][0]["open"], 120.0);
+    assert_eq!(body["candles"][0]["volume"], 20);
+    assert_eq!(body["candles"][0]["date"], "2024-03-09");
+    let (status, _) = request(
+        app.clone(),
+        Method::GET,
+        "/user/shares/BAD/candles",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    let (status, body) = request(app.clone(), Method::GET, "/market/series", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let keys = body["series"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|series| series["key"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        keys,
+        [
+            "CCL",
+            "MEP",
+            "RIESGO_PAIS",
+            "TPM",
+            "BADLAR",
+            "TNX",
+            "GOLD",
+            "OIL"
+        ]
+    );
+    assert_eq!(body["series"][0]["points"][0]["ts"], 1_700_000_000_000_i64);
+    assert_eq!(body["series"][0]["points"][1]["value"], 4.25);
+    assert_eq!(body["series"][6]["points"][1]["value"], 125.5);
+    assert_eq!(body["unavailable"][0]["key"], "RESERVAS");
+    assert_eq!(
+        body["unavailable"][0]["reason"],
+        "Failed to fetch interest rate series"
+    );
+    let (status, _) = request(app.clone(), Method::GET, "/market/series", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, body) = request(
+        app.clone(),
+        Method::GET,
+        "/user/shares/covr/explain",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["symbol"], "COVR");
+    assert_eq!(body["contributions"][0]["feature"], "rsi");
+    let (status, body) = request(
+        app.clone(),
+        Method::GET,
+        "/user/shares/NOPE/explain",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["message"], "sin artefacto para NOPE");
+
+    let (status, body) = request(
+        app.clone(),
+        Method::GET,
+        "/user/signals/history",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["symbols"], "COVR");
+    assert_eq!(body["limit"], "200");
+
+    let (status, body) = request(app.clone(), Method::GET, "/user", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["role"], "user");
+
+    for (method, uri) in [
+        (Method::GET, "/admin/health"),
+        (Method::GET, "/admin/models"),
+        (Method::POST, "/admin/user-shares/backfill"),
+    ] {
+        let (status, _) = request(app.clone(), method.clone(), uri, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri} sin token");
+        let (status, body) = request(app.clone(), method, uri, Some(&token)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri} sin rol admin");
+        assert_eq!(body["error"], "ADMIN_REQUIRED");
+    }
+
+    sqlx::query("UPDATE users SET role = 'admin' WHERE email = $1")
+        .bind(&email)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    let (status, body) = request(app.clone(), Method::GET, "/user", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["role"], "admin");
+
+    std::env::set_var("MODAL_HEALTH_URL", format!("{base}/lstm"));
+    let (status, body) = request(app.clone(), Method::GET, "/admin/health", Some(&token)).await;
+    std::env::remove_var("MODAL_HEALTH_URL");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["all_up"], true);
+    assert_eq!(body["services"][0]["name"], "data-colector");
+    assert_eq!(body["services"][1]["http_status"], 200);
+    assert!(body["services"][2]["latency_ms"].is_u64());
+
+    let (status, body) = request(app.clone(), Method::GET, "/admin/models", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["models"]["xgboost"]["auc"], 0.55);
+
+    let (status, _) = request(
+        app.clone(),
+        Method::POST,
+        "/admin/user-shares/backfill",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
 
     stub_state
         .mode

@@ -67,7 +67,10 @@ async fn main() {
             Method::PATCH,
             Method::DELETE,
         ])
-        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE]);
+        .allow_headers([ACCEPT, AUTHORIZATION, CONTENT_TYPE])
+        // El navegador recuerda el preflight una hora: sin esto, cada GET
+        // autenticado va precedido de un OPTIONS.
+        .max_age(std::time::Duration::from_secs(3600));
 
     let session_store = PostgresStore::new(pool.clone());
     session_store

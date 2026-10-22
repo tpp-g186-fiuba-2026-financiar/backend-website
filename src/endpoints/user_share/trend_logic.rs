@@ -357,7 +357,7 @@ fn prepare_models_in_background(ticker: &str) -> bool {
 fn discover_ticker_for_training(ticker: &str) {
     let ticker = ticker.to_owned();
     let collector = std::env::var("DATA_COLLECTOR_URL")
-        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+        .unwrap_or_else(|_| "https://data-colector-k7h6.onrender.com".into());
     tokio::spawn(async move {
         let result = reqwest::Client::builder()
             .timeout(Duration::from_secs(90))

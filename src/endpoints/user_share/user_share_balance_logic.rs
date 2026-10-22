@@ -23,7 +23,7 @@ use crate::auth::middleware::AuthUser;
 pub async fn fetch_ticker_history(ticker: &str) -> Result<Vec<PricePoint>, PriceFetchError> {
     let ticker = ticker.trim().to_uppercase();
     let base = std::env::var("DATA_COLLECTOR_URL")
-        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+        .unwrap_or_else(|_| "https://data-colector-k7h6.onrender.com".into());
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
         .build()

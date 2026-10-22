@@ -15,7 +15,7 @@ use std::time::Duration;
 pub async fn handler(Path(ticker): Path<String>) -> impl IntoResponse {
     let ticker = ticker.trim().to_uppercase();
     let base = std::env::var("DATA_COLLECTOR_URL")
-        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+        .unwrap_or_else(|_| "https://data-colector-k7h6.onrender.com".into());
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(45))
         .build()

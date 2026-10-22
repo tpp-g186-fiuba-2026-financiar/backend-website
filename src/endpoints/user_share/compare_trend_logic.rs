@@ -66,6 +66,17 @@ pub async fn handler(
         .timeout(Duration::from_secs(20))
         .build()
         .expect("reqwest client");
+    let api_ml_url = std::env::var("API_ML_URL").ok();
+
+    // Los modelos de Modal predicen en vivo en cada pedido y, si tardan, la
+    // pantalla espera hasta el timeout. Las velas son diarias: lo ya comparado
+    // hoy se reusa y solo el consenso (depende del perfil) se pide de nuevo.
+    if let Some(mut cached) = cached_comparison(&pool, &ticker).await {
+        let consensus =
+            fetch_consensus(&client, api_ml_url.as_deref(), &ticker, &risk_profile).await;
+        cached["consensus"] = consensus;
+        return (StatusCode::OK, Json(cached));
+    }
     let lstm_url = modal::LSTM.url();
     let xgboost_url = modal::XGBOOST.url();
     let transformer_url = modal::TRANSFORMER.url();
@@ -73,7 +84,6 @@ pub async fn handler(
     let svm_url = modal::SVM.url();
     let garch_url = modal::GARCH.url();
     let garch_ann_url = modal::GARCH_ANN.url();
-    let api_ml_url = std::env::var("API_ML_URL").ok();
 
     let (lstm, xgboost, transformer, arima, svm, garch, garch_ann, api_ml_models, consensus) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
@@ -104,16 +114,74 @@ pub async fn handler(
         predictions.insert(key, value);
     }
     let default_model = pick_best_model(&predictions);
-    (
-        StatusCode::OK,
-        Json(json!({
-            "symbol": ticker,
-            "as_of": as_of,
-            "default_model": default_model,
-            "predictions": predictions,
-            "consensus": consensus
-        })),
+    let complete = all_responded(&predictions);
+    let mut body = json!({
+        "symbol": ticker,
+        "as_of": as_of,
+        "default_model": default_model,
+        "predictions": predictions,
+    });
+    store_comparison(&pool, &ticker, &body, complete).await;
+    body["consensus"] = consensus;
+    (StatusCode::OK, Json(body))
+}
+
+/// Minutos que se reusa una comparacion en la que algun modelo no respondio,
+/// antes de volver a intentar.
+const INCOMPLETE_CACHE_MINUTES: i32 = 15;
+
+/// GARCH y GARCH-ANN responden con `available: false` (no dan direccion): para
+/// ellos cuenta que haya llegado el pronostico de volatilidad.
+fn all_responded(predictions: &serde_json::Map<String, Value>) -> bool {
+    predictions.values().all(|value| {
+        value.get("available").and_then(Value::as_bool) == Some(true)
+            || value
+                .get("volatility_forecast")
+                .is_some_and(|forecast| !forecast.is_null())
+    })
+}
+
+/// Comparacion guardada hoy (hora de Buenos Aires) para el ticker, si sigue
+/// vigente: completa, todo el dia; con modelos caidos, `INCOMPLETE_CACHE_MINUTES`.
+async fn cached_comparison(pool: &PgPool, ticker: &str) -> Option<Value> {
+    sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT payload
+        FROM ticker_compare_cache
+        WHERE ticker = $1
+          AND (fetched_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+              = (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+          AND (complete OR fetched_at > now() - make_interval(mins => $2))
+        "#,
     )
+    .bind(ticker)
+    .bind(INCOMPLETE_CACHE_MINUTES)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or_else(|error| {
+        tracing::error!("No se pudo leer la cache de comparacion: {}", error);
+        None
+    })
+}
+
+async fn store_comparison(pool: &PgPool, ticker: &str, payload: &Value, complete: bool) {
+    if let Err(error) = sqlx::query(
+        r#"
+        INSERT INTO ticker_compare_cache (ticker, payload, complete, fetched_at)
+        VALUES ($1, $2, $3, now())
+        ON CONFLICT (ticker)
+        DO UPDATE SET payload = EXCLUDED.payload, complete = EXCLUDED.complete,
+                      fetched_at = EXCLUDED.fetched_at
+        "#,
+    )
+    .bind(ticker)
+    .bind(payload)
+    .bind(complete)
+    .execute(pool)
+    .await
+    {
+        tracing::error!("No se pudo guardar la comparacion de {}: {}", ticker, error);
+    }
 }
 
 const DEFAULT_RISK_PROFILE: &str = "moderate";
@@ -122,14 +190,23 @@ const DEFAULT_RISK_PROFILE: &str = "moderate";
 /// Si todavia no lo configuro, o la consulta falla, se usa el moderado: el
 /// consenso es informativo y no debe romper la pantalla por esto.
 async fn user_risk_profile(pool: &PgPool, user_id: i32) -> String {
-    sqlx::query_as::<_, (Option<String>,)>("SELECT risk_profile FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|(profile,)| profile)
-        .unwrap_or_else(|| DEFAULT_RISK_PROFILE.to_string())
+    sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT risk_profile
+        FROM user_investing_profiles
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or_else(|error| {
+        tracing::error!("No se pudo leer el perfil de riesgo: {}", error);
+        None
+    })
+    .unwrap_or_else(|| DEFAULT_RISK_PROFILE.to_string())
 }
 
 fn consensus_url(api_ml_url: &str, ticker: &str, risk_profile: &str) -> String {
@@ -696,6 +773,43 @@ mod consensus_url_tests {
             consensus_url("http://localhost:8001/", "GGAL", "aggressive"),
             "http://localhost:8001/predict/trend/consensus/GGAL?profile=aggressive"
         );
+    }
+}
+
+#[cfg(test)]
+mod all_responded_tests {
+    use super::all_responded;
+    use serde_json::{json, Value};
+
+    fn predictions(entries: &[(&str, Value)]) -> serde_json::Map<String, Value> {
+        entries
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn garch_with_forecast_counts_as_responded() {
+        let predictions = predictions(&[
+            ("lstm-modal", json!({"available": true})),
+            (
+                "garch-modal",
+                json!({"available": false, "volatility_forecast": [{"horizon_days": 1}]}),
+            ),
+        ]);
+        assert!(all_responded(&predictions));
+    }
+
+    #[test]
+    fn a_model_that_failed_makes_it_incomplete() {
+        let predictions = predictions(&[
+            ("lstm-modal", json!({"available": true})),
+            (
+                "xgboost-modal",
+                json!({"available": false, "volatility_forecast": null, "reason": "Modal respondio HTTP 500"}),
+            ),
+        ]);
+        assert!(!all_responded(&predictions));
     }
 }
 
