@@ -1028,6 +1028,47 @@
         ]
       }
     },
+    "/user/preferences/{stock}": {
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "stock",
+            "in": "path",
+            "description": "Stock ticker whose preference should be deleted",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Preference deleted successfully"
+          },
+          "400": {
+            "description": "Invalid stock ticker"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Preference not found for the authenticated user and stock"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares": {
       "get": {
         "tags": [
