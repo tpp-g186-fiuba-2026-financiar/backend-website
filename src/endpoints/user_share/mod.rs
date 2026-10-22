@@ -2,6 +2,7 @@ pub mod balance_history_logic;
 pub mod candles_logic;
 pub mod compare_trend_logic;
 pub mod delete_logic;
+pub mod delete_user_preference;
 pub mod explain_logic;
 pub mod get_logic;
 pub mod history_logic;

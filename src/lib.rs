@@ -12,7 +12,7 @@ pub static ENV_TEST_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
 
 use axum::{
     middleware,
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use sqlx::PgPool;
@@ -138,6 +138,7 @@ impl Modify for SecurityAddon {
         endpoints::user_share::get_logic::handler,
         endpoints::user_share::post_logic::handler,
         endpoints::user_share::post_user_preferences::handler,
+        endpoints::user_share::delete_user_preference::handler,
         endpoints::user_share::delete_logic::handler,
         endpoints::user_share::put_logic::handler,
         endpoints::user_share::trend_logic::handler,
@@ -300,6 +301,10 @@ pub fn app_with_state(
         .route(
             "/user/preferences",
             post(endpoints::user_share::post_user_preferences::handler),
+        )
+        .route(
+            "/user/preferences/{stock}",
+            delete(endpoints::user_share::delete_user_preference::handler),
         )
         .route("/user/2fa/setup", post(two_factor_logic::setup))
         .route("/user/2fa/enable", post(two_factor_logic::enable))
