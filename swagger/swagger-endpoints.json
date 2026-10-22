@@ -9,6 +9,129 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/admin/health": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Estado y latencia de los servicios externos (timeout 5s cada uno, en paralelo)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminHealthResponse"
+                },
+                "example": {
+                  "all_up": false,
+                  "services": [
+                    {
+                      "error": null,
+                      "http_status": 200,
+                      "latency_ms": 120,
+                      "name": "data-colector",
+                      "status": "up"
+                    },
+                    {
+                      "error": null,
+                      "http_status": 200,
+                      "latency_ms": 85,
+                      "name": "api-ml",
+                      "status": "up"
+                    },
+                    {
+                      "error": "timeout",
+                      "http_status": null,
+                      "latency_ms": 5001,
+                      "name": "modal",
+                      "status": "down"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/admin/models": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Diagnostico de los modelos (backtests + metricas OOS de XGBoost), tal cual lo devuelve api-ml en GET /models/diagnostics",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/admin/user-shares/backfill": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "backfill_user_shares_handler",
+        "responses": {
+          "200": {
+            "description": "Completa entry_price faltantes y siembra el ledger de operaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/forgot-password": {
       "post": {
         "tags": [
@@ -211,6 +334,62 @@
             }
           }
         }
+      }
+    },
+    "/market/series": {
+      "get": {
+        "tags": [
+          "Market"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Series macro/mercado (dolar, riesgo pais, tasas, reservas, commodities). Una serie caida no rompe las demas: se informa en `unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketSeriesResponse"
+                },
+                "example": {
+                  "series": [
+                    {
+                      "key": "CCL",
+                      "points": [
+                        {
+                          "ts": 1747008000000,
+                          "value": 1610.8
+                        }
+                      ]
+                    },
+                    {
+                      "key": "TNX",
+                      "points": [
+                        {
+                          "ts": 1747008000000,
+                          "value": 4.25
+                        }
+                      ]
+                    }
+                  ],
+                  "unavailable": [
+                    {
+                      "key": "RESERVAS",
+                      "reason": "Failed to fetch interest rate series"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/register": {
@@ -482,6 +661,7 @@
                   "id": 1,
                   "is_active": true,
                   "risk_profile": "moderate",
+                  "role": "user",
                   "two_factor_enabled": false
                 }
               }
@@ -848,47 +1028,6 @@
         ]
       }
     },
-    "/user/preferences/{stock}": {
-      "delete": {
-        "tags": [
-          "User"
-        ],
-        "operationId": "handler",
-        "parameters": [
-          {
-            "name": "stock",
-            "in": "path",
-            "description": "Stock ticker whose preference should be deleted",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Preference deleted successfully"
-          },
-          "400": {
-            "description": "Invalid stock ticker"
-          },
-          "401": {
-            "description": "Missing or invalid authentication token"
-          },
-          "404": {
-            "description": "Preference not found for the authenticated user and stock"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
     "/user/shares": {
       "get": {
         "tags": [
@@ -1090,10 +1229,25 @@
                   "$ref": "#/components/schemas/PortfolioRecomendacionResponse"
                 },
                 "example": {
+                  "cartera_ancla": "propia",
+                  "detalle": [
+                    {
+                      "horizon_days": 5,
+                      "mu_bl": 0.0007,
+                      "omega": 0.00002,
+                      "peso_actual": 0.5,
+                      "peso_recomendado": 0.58,
+                      "pi": 0.0004,
+                      "q": 0.0011,
+                      "ticker": "GGAL"
+                    }
+                  ],
                   "pesos_recomendados": {
-                    "GGAL": 0.42,
-                    "PAMP": 0.27,
-                    "YPFD": 0.31
+                    "GGAL": 0.58,
+                    "YPFD": 0.42
+                  },
+                  "tickers_excluidos": {
+                    "PAMP": "sin prediccion disponible"
                   }
                 }
               }
@@ -1301,6 +1455,120 @@
         ]
       }
     },
+    "/user/shares/{ticker}/candles": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Cantidad de ruedas mas recientes a devolver (default: todas las cacheadas)",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Velas diarias OHLCV ordenadas por fecha ascendente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandlesResponse"
+                },
+                "example": {
+                  "candles": [
+                    {
+                      "close": 7605.0,
+                      "date": "2026-06-25",
+                      "high": 7720.0,
+                      "low": 7580.0,
+                      "open": 7650.0,
+                      "volume": 1200000
+                    }
+                  ],
+                  "ticker": "GGAL"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "502": {
+            "description": "data-colector no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/explain": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Explicacion de la prediccion XGBoost (contribucion de cada feature), tal cual la devuelve api-ml en GET /predict/trend/xgboost/explain/{ticker}",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "404": {
+            "description": "api-ml no tiene modelo/datos para el ticker"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/user/shares/{ticker}/history": {
       "get": {
         "tags": [
@@ -1376,6 +1644,41 @@
           },
           "502": {
             "description": "Ningun modelo de Modal pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/signals/history": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Historial de senales emitidas por los modelos para los tickers del usuario, tal cual lo devuelve api-ml en GET /signals/history. Sin tenencias devuelve `{\"signals\": []}` sin consultar a api-ml",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
           }
         },
         "security": [
@@ -1498,6 +1801,25 @@
   },
   "components": {
     "schemas": {
+      "AdminHealthResponse": {
+        "type": "object",
+        "required": [
+          "all_up",
+          "services"
+        ],
+        "properties": {
+          "all_up": {
+            "type": "boolean",
+            "description": "true si todos los servicios estan `up`"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceHealth"
+            }
+          }
+        }
+      },
       "AlertSubscriptionResponse": {
         "type": "object",
         "required": [
@@ -1513,6 +1835,83 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "BackfillReport": {
+        "type": "object",
+        "required": [
+          "entry_prices_updated",
+          "entry_prices_skipped",
+          "operations_seeded"
+        ],
+        "properties": {
+          "entry_prices_skipped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entry_prices_updated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operations_seeded": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Candle": {
+        "type": "object",
+        "required": [
+          "date",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "properties": {
+          "close": {
+            "type": "number",
+            "format": "double"
+          },
+          "date": {
+            "type": "string",
+            "description": "Fecha de la rueda (UTC), formato YYYY-MM-DD"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "open": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CandlesResponse": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "candles"
+        ],
+        "properties": {
+          "candles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candle"
+            }
+          },
+          "ticker": {
+            "type": "string"
           }
         }
       },
@@ -1655,6 +2054,7 @@
           "has_to_redo_risk_profile",
           "is_active",
           "two_factor_enabled",
+          "role",
           "created_at"
         ],
         "properties": {
@@ -1683,6 +2083,10 @@
               "string",
               "null"
             ]
+          },
+          "role": {
+            "type": "string",
+            "description": "user | admin"
           },
           "two_factor_enabled": {
             "type": "boolean"
@@ -1862,6 +2266,48 @@
           }
         }
       },
+      "MarketSeries": {
+        "type": "object",
+        "required": [
+          "key",
+          "points"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "CCL | MEP | RIESGO_PAIS | TPM | BADLAR | RESERVAS | TNX | GOLD | OIL"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            }
+          }
+        }
+      },
+      "MarketSeriesResponse": {
+        "type": "object",
+        "required": [
+          "series",
+          "unavailable"
+        ],
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketSeries"
+            },
+            "description": "Series que se pudieron obtener, en el orden fijo de arriba"
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnavailableSeries"
+            },
+            "description": "Series que fallaron (se omiten de `series`), con el motivo"
+          }
+        }
+      },
       "ModelPredictionItem": {
         "type": "object",
         "required": [
@@ -1974,6 +2420,57 @@
           }
         }
       },
+      "PortfolioDetalleItem": {
+        "type": "object",
+        "description": "Detalle Black-Litterman por ticker (se reenvia tal cual desde api-ml).",
+        "required": [
+          "ticker",
+          "peso_actual",
+          "peso_recomendado",
+          "pi",
+          "q",
+          "omega",
+          "mu_bl",
+          "horizon_days"
+        ],
+        "properties": {
+          "horizon_days": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mu_bl": {
+            "type": "number",
+            "format": "double",
+            "description": "Retorno posterior Black-Litterman"
+          },
+          "omega": {
+            "type": "number",
+            "format": "double",
+            "description": "Incertidumbre de la view"
+          },
+          "peso_actual": {
+            "type": "number",
+            "format": "double"
+          },
+          "peso_recomendado": {
+            "type": "number",
+            "format": "double"
+          },
+          "pi": {
+            "type": "number",
+            "format": "double",
+            "description": "Retorno de equilibrio (prior)"
+          },
+          "q": {
+            "type": "number",
+            "format": "double",
+            "description": "View del modelo (retorno diario esperado)"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
       "PortfolioPnlSummary": {
         "type": "object",
         "required": [
@@ -2005,15 +2502,39 @@
       },
       "PortfolioRecomendacionResponse": {
         "type": "object",
+        "description": "El body de api-ml se reenvia tal cual; este schema documenta sus campos.",
         "required": [
-          "pesos_recomendados"
+          "pesos_recomendados",
+          "detalle",
+          "tickers_excluidos",
+          "cartera_ancla"
         ],
         "properties": {
+          "cartera_ancla": {
+            "type": "string",
+            "description": "Estrategia de cartera ancla usada: propia | equal_weight | mercado"
+          },
+          "detalle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortfolioDetalleItem"
+            }
+          },
           "pesos_recomendados": {
             "type": "object",
             "additionalProperties": {
               "type": "number",
               "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tickers_excluidos": {
+            "type": "object",
+            "description": "Ticker -> motivo por el que quedo afuera de la optimizacion",
+            "additionalProperties": {
+              "type": "string"
             },
             "propertyNames": {
               "type": "string"
@@ -2133,6 +2654,66 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "SeriesPoint": {
+        "type": "object",
+        "required": [
+          "ts",
+          "value"
+        ],
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Epoch en milisegundos"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ServiceHealth": {
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Motivo de la falla, si la hubo"
+          },
+          "http_status": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Status HTTP que respondio el servicio, si respondio",
+            "minimum": 0
+          },
+          "latency_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Latencia del chequeo en ms (null si no se llego a consultar)",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "data-colector | api-ml | modal"
+          },
+          "status": {
+            "type": "string",
+            "description": "up | down | not_configured"
           }
         }
       },
@@ -2364,6 +2945,21 @@
           }
         }
       },
+      "UnavailableSeries": {
+        "type": "object",
+        "required": [
+          "key",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateShareRequest": {
         "type": "object",
         "required": [
@@ -2466,6 +3062,14 @@
     {
       "name": "Alerts",
       "description": "Endpoints for subscribing to trend-change email alerts"
+    },
+    {
+      "name": "Market",
+      "description": "Macro and market context series"
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints (require role = admin)"
     },
     {
       "name": "General",
