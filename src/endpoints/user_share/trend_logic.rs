@@ -12,13 +12,9 @@ use tokio::task::JoinSet;
 use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
+use crate::modal;
 
 const MAX_CONCURRENT_PREPARATIONS: usize = 2;
-const DEFAULT_LSTM_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
-const DEFAULT_XGBOOST_URL: &str = "https://matimorales01--xgboost-trend-model-main.modal.run";
-const DEFAULT_TRANSFORMER_URL: &str =
-    "https://matimorales01--transformer-trend-model-main.modal.run";
-const DEFAULT_ARIMA_URL: &str = "https://matimorales01--arima-model-main.modal.run";
 const DEFAULT_MODEL: &str = "lstm-modal";
 static PREPARING_TICKERS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -280,13 +276,13 @@ fn preferred_model(model: Option<&str>) -> &str {
 }
 
 fn modal_url(model: &str) -> String {
-    let (environment_variable, default_url) = match model {
-        "arima-modal" => ("MODAL_ARIMA_URL", DEFAULT_ARIMA_URL),
-        "transformer-modal" => ("MODAL_TRANSFORMER_URL", DEFAULT_TRANSFORMER_URL),
-        "xgboost-modal" => ("MODAL_XGBOOST_URL", DEFAULT_XGBOOST_URL),
-        _ => ("MODAL_LSTM_URL", DEFAULT_LSTM_URL),
+    let endpoint = match model {
+        "arima-modal" => &modal::ARIMA,
+        "transformer-modal" => &modal::TRANSFORMER,
+        "xgboost-modal" => &modal::XGBOOST,
+        _ => &modal::LSTM,
     };
-    std::env::var(environment_variable).unwrap_or_else(|_| default_url.to_string())
+    endpoint.url()
 }
 
 async fn fetch_selected_trend(
@@ -317,10 +313,8 @@ fn prepare_models_in_background(ticker: &str) -> bool {
         }
         preparing.insert(ticker.clone());
     }
-    let lstm_url = std::env::var("MODAL_LSTM_PREPARE_URL")
-        .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-prepare.modal.run".into());
-    let xgboost_url = std::env::var("MODAL_XGBOOST_PREPARE_URL")
-        .unwrap_or_else(|_| "https://matimorales01--xgboost-trend-model-prepare.modal.run".into());
+    let lstm_url = modal::LSTM_PREPARE.url();
+    let xgboost_url = modal::XGBOOST_PREPARE.url();
     tokio::spawn(async move {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(7200))
@@ -665,8 +659,9 @@ mod tests {
         assert_eq!(preferred_model(Some("unsupported")), "lstm-modal");
     }
 
-    #[test]
-    fn modal_url_prefers_env_overrides_and_falls_back_to_defaults() {
+    #[tokio::test]
+    async fn modal_url_prefers_env_overrides_and_falls_back_to_the_template() {
+        let _env_guard = crate::ENV_TEST_LOCK.lock().await;
         let previous_lstm = std::env::var("MODAL_LSTM_URL").ok();
         let previous_transformer = std::env::var("MODAL_TRANSFORMER_URL").ok();
         let previous_xgboost = std::env::var("MODAL_XGBOOST_URL").ok();
@@ -694,10 +689,24 @@ mod tests {
         std::env::remove_var("MODAL_XGBOOST_URL");
         std::env::remove_var("MODAL_ARIMA_URL");
 
-        assert_eq!(modal_url("lstm-modal"), DEFAULT_LSTM_URL);
-        assert_eq!(modal_url("transformer-modal"), DEFAULT_TRANSFORMER_URL);
-        assert_eq!(modal_url("xgboost-modal"), DEFAULT_XGBOOST_URL);
-        assert_eq!(modal_url("arima-modal"), DEFAULT_ARIMA_URL);
+        std::env::set_var("MODAL_URL", "https://workspace--{endpoint}.modal.run");
+        assert_eq!(
+            modal_url("lstm-modal"),
+            "https://workspace--lstm-trend-model-main.modal.run"
+        );
+        assert_eq!(
+            modal_url("transformer-modal"),
+            "https://workspace--transformer-trend-model-main.modal.run"
+        );
+        assert_eq!(
+            modal_url("xgboost-modal"),
+            "https://workspace--xgboost-trend-model-main.modal.run"
+        );
+        assert_eq!(
+            modal_url("arima-modal"),
+            "https://workspace--arima-model-main.modal.run"
+        );
+        std::env::remove_var("MODAL_URL");
 
         if let Some(value) = previous_lstm {
             std::env::set_var("MODAL_LSTM_URL", value);

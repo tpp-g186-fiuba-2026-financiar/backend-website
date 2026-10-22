@@ -45,8 +45,7 @@ async fn check_trend_changes(
         return Ok(());
     }
 
-    let modal_lstm_url = std::env::var("MODAL_LSTM_URL")
-        .unwrap_or_else(|_| "https://matimorales01--lstm-trend-model-main.modal.run".into());
+    let modal_lstm_url = crate::modal::LSTM.url();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
