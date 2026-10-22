@@ -15,6 +15,10 @@ El proyecto usa variables de entorno para la base de datos, JWT, SMTP y CORS. Al
 - `ALLOWED_ORIGIN`
 - `DATA_COLLECTOR_URL`
 - `API_ML_URL`
+- `MODAL_URL`: template de las URLs de los modelos en Modal, con `{endpoint}` donde va
+  `<app>-<funcion>` (p. ej. `https://financiar186--{endpoint}.us-east.modal.run`). Cambiar de
+  workspace de Modal es cambiar solo esta variable. Cada modelo se puede pisar por separado con
+  su propia variable (`MODAL_LSTM_URL`, `MODAL_SVM_URL`, ...).
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_USERNAME`

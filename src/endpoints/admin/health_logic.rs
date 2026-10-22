@@ -4,9 +4,9 @@ use std::time::{Duration, Instant};
 use utoipa::ToSchema;
 
 use crate::endpoints::upstream;
+use crate::modal;
 
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
-const DEFAULT_MODAL_HEALTH_URL: &str = "https://matimorales01--lstm-trend-model-main.modal.run";
 
 #[derive(Serialize, ToSchema)]
 pub struct ServiceHealth {
@@ -53,9 +53,7 @@ pub async fn handler() -> impl IntoResponse {
     let api_ml = upstream::api_ml_url().map(|url| format!("{url}/health"));
     // Modal no expone /health: cualquier respuesta < 500 del endpoint del
     // modelo (aunque sea 4xx por faltar el ticker) significa que esta arriba.
-    let modal = std::env::var("MODAL_HEALTH_URL")
-        .or_else(|_| std::env::var("MODAL_LSTM_URL"))
-        .unwrap_or_else(|_| DEFAULT_MODAL_HEALTH_URL.into());
+    let modal = std::env::var("MODAL_HEALTH_URL").unwrap_or_else(|_| modal::LSTM.url());
 
     let (data_collector, api_ml, modal) = tokio::join!(
         check(&client, "data-colector", Some(data_collector), false),
