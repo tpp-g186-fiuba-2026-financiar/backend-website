@@ -1,7 +1,10 @@
+pub mod admin;
 pub mod alert_subscription;
 pub mod health;
 pub mod hello;
+pub mod market;
 pub mod retro;
 pub mod share;
+pub mod upstream;
 pub mod user;
 pub mod user_share;

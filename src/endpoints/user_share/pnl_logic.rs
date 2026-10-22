@@ -115,7 +115,7 @@ pub async fn handler(
     };
 
     let collector_url = std::env::var("DATA_COLLECTOR_URL")
-        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+        .unwrap_or_else(|_| "https://data-colector-k7h6.onrender.com".into());
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
         .build()

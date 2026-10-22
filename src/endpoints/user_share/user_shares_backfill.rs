@@ -2,6 +2,18 @@ use axum::{extract::State, http::StatusCode, Json};
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
+#[utoipa::path(
+    post,
+    path = "/admin/user-shares/backfill",
+    responses(
+        (status = 200, description = "Completa entry_price faltantes y siembra el ledger de operaciones", body = BackfillReport),
+        (status = 401, description = "Missing or invalid authentication token"),
+        (status = 403, description = "El usuario no es administrador", example = json!({"code": 403, "error": "ADMIN_REQUIRED", "message": "Esta funcionalidad es solo para administradores."})),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Admin"
+)]
 pub async fn backfill_user_shares_handler(
     State(pool): State<PgPool>,
 ) -> Result<Json<BackfillReport>, StatusCode> {
@@ -106,7 +118,7 @@ use crate::endpoints::user_share::{
     user_share_operations::{record_operation_at, OperationType},
 };
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct BackfillReport {
     pub entry_prices_updated: usize,
     pub entry_prices_skipped: usize,

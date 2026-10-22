@@ -80,13 +80,13 @@ mod tests {
                 is_buy: true,
                 quantity: 10,
                 price: 100.0,
-                created_at_ms: 1 * DAY,
+                created_at_ms: DAY,
             },
             LedgerOp {
                 is_buy: false,
                 quantity: 3,
                 price: 120.0,
-                created_at_ms: 1 * DAY + 3_600_000,
+                created_at_ms: DAY + 3_600_000,
             },
         ]);
         assert_eq!(holdings_on_day(&checkpoints, 1), (7, 100.0));
