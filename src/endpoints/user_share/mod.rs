@@ -1,7 +1,9 @@
 pub mod balance_history_logic;
+pub mod candles_logic;
 pub mod compare_trend_logic;
 pub mod delete_logic;
 pub mod delete_user_preference;
+pub mod explain_logic;
 pub mod get_logic;
 pub mod history_logic;
 pub mod pnl_logic;
@@ -9,6 +11,7 @@ pub mod portfolio_logic;
 pub mod post_logic;
 pub mod post_user_preferences;
 pub mod put_logic;
+pub mod signals_history_logic;
 pub mod trend_logic;
 pub mod user_share_balance_logic;
 pub mod user_share_operations;

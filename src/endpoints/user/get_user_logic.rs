@@ -16,6 +16,8 @@ pub struct GetUserResponse {
     pub has_to_redo_risk_profile: bool,
     pub is_active: bool,
     pub two_factor_enabled: bool,
+    /// user | admin
+    pub role: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -31,6 +33,7 @@ pub struct GetUserResponse {
             "has_to_redo_risk_profile": false,
             "is_active": true,
             "two_factor_enabled": false,
+            "role": "user",
             "created_at": "2026-05-13T12:00:00Z"
         })),
         (status = 401, description = "Missing or invalid authentication token", example = json!({
@@ -83,6 +86,17 @@ pub async fn handler(
     .map(|row| (Some(row.risk_profile), row.has_to_redo_risk_profile))
     .unwrap_or_else(|| (None, Some(true)));
 
+    // Runtime query (no macro) para no depender del cache offline de sqlx.
+    let role = sqlx::query_scalar::<_, String>("SELECT role FROM users WHERE id = $1")
+        .bind(auth_user.user_id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("Database query failed during /user role lookup: {}", e);
+            None
+        })
+        .unwrap_or_else(|| "user".to_string());
+
     match row {
         Ok(Some(user)) => (
             StatusCode::OK,
@@ -96,6 +110,7 @@ pub async fn handler(
                                                                                // false
                 "is_active": user.is_active,
                 "two_factor_enabled": user.two_factor_enabled,
+                "role": role,
                 "created_at": user.created_at,
             })),
         ),

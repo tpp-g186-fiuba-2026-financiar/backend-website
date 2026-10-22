@@ -16,6 +16,13 @@ fn openapi_document_lists_the_public_endpoints() {
         "/user/2fa/enable",
         "/user/2fa/disable",
         "/user/shares",
+        "/user/shares/{ticker}/candles",
+        "/user/shares/{ticker}/explain",
+        "/user/signals/history",
+        "/market/series",
+        "/admin/health",
+        "/admin/models",
+        "/admin/user-shares/backfill",
     ] {
         assert!(paths.contains_key(path), "missing {path} in OpenAPI");
     }

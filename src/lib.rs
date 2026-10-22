@@ -23,9 +23,16 @@ use utoipa::{
     Modify, OpenApi,
 };
 
+use crate::endpoints::admin::health_logic::{
+    self as admin_health_logic, AdminHealthResponse, ServiceHealth,
+};
+use crate::endpoints::admin::models_logic as admin_models_logic;
 use crate::endpoints::alert_subscription::delete_logic as alert_subscription_delete_logic;
 use crate::endpoints::alert_subscription::post_logic::{
     self as alert_subscription_post_logic, AlertSubscriptionResponse,
+};
+use crate::endpoints::market::series_logic::{
+    self as market_series_logic, MarketSeries, MarketSeriesResponse, SeriesPoint, UnavailableSeries,
 };
 use crate::endpoints::share::get_logic as share_get_logic;
 use crate::endpoints::share::get_sector as share_get_sector;
@@ -52,10 +59,14 @@ use crate::endpoints::user::two_factor::two_factor_logic::{
     self as two_factor_logic, TwoFactorCodeRequest,
 };
 use crate::endpoints::user_share::balance_history_logic;
+use crate::endpoints::user_share::candles_logic::{
+    self as user_share_candles_logic, Candle, CandlesResponse,
+};
 use crate::endpoints::user_share::compare_trend_logic::{
     self as user_share_compare_trend_logic, CompareTrendsResponse, ModelPredictionItem,
 };
 use crate::endpoints::user_share::delete_logic as user_share_delete_logic;
+use crate::endpoints::user_share::explain_logic as user_share_explain_logic;
 use crate::endpoints::user_share::get_logic::{
     self as user_share_get_logic, ListSharesResponse, ShareItem,
 };
@@ -73,19 +84,23 @@ use crate::endpoints::user_share::post_user_preferences::{
 use crate::endpoints::user_share::put_logic::{
     self as user_share_put_logic, UpdateShareRequest, UpdateShareResponse,
 };
+use crate::endpoints::user_share::signals_history_logic as user_share_signals_history_logic;
 use crate::endpoints::user_share::trend_logic::{
     self as user_share_trend_logic, ListTrendsResponse, ShareTrendItem,
 };
+use crate::endpoints::user_share::user_shares_backfill::BackfillReport;
 use crate::endpoints::{
     alert_subscription::get_logic::{
         self as alert_subscription_get_logic, ListAlertSubscriptionsResponse,
     },
     user_share::user_shares_backfill,
 };
-use crate::user_share_portfolio_logic::PortfolioRecomendacionResponse;
+use crate::user_share_portfolio_logic::{PortfolioDetalleItem, PortfolioRecomendacionResponse};
+use crate::{
+    auth::admin::require_admin, auth::profile::require_profile, configuration::config::AppState,
+};
 use crate::{auth::jwt::JwtConfig, endpoints::user::update_risk_profile_logic};
 use crate::{auth::middleware::require_auth, endpoints::user_share::user_share_balance_logic};
-use crate::{auth::profile::require_profile, configuration::config::AppState};
 
 pub struct SecurityAddon;
 
@@ -139,6 +154,13 @@ impl Modify for SecurityAddon {
         endpoints::alert_subscription::delete_logic::unsubscribe_ticker,
         endpoints::alert_subscription::delete_logic::unsubscribe_portfolio,
         endpoints::alert_subscription::get_logic::handler,
+        endpoints::user_share::candles_logic::handler,
+        endpoints::user_share::explain_logic::handler,
+        endpoints::user_share::signals_history_logic::handler,
+        endpoints::market::series_logic::handler,
+        endpoints::admin::health_logic::handler,
+        endpoints::admin::models_logic::handler,
+        endpoints::user_share::user_shares_backfill::backfill_user_shares_handler,
     ),
     components(
         schemas(
@@ -174,6 +196,16 @@ impl Modify for SecurityAddon {
             PortfolioPnlSummary,
             AlertSubscriptionResponse,
             ListAlertSubscriptionsResponse,
+            PortfolioDetalleItem,
+            Candle,
+            CandlesResponse,
+            MarketSeriesResponse,
+            MarketSeries,
+            SeriesPoint,
+            UnavailableSeries,
+            AdminHealthResponse,
+            ServiceHealth,
+            BackfillReport,
         )
     ),
     modifiers(&SecurityAddon),
@@ -183,6 +215,8 @@ impl Modify for SecurityAddon {
         (name = "User", description = "Endpoints for retrieving authenticated user information"),
         (name = "Share", description = "Endpoints for managing the authenticated user's declared stock portfolio"),
         (name = "Alerts", description = "Endpoints for subscribing to trend-change email alerts"),
+        (name = "Market", description = "Macro and market context series"),
+        (name = "Admin", description = "Admin-only endpoints (require role = admin)"),
         (name = "General", description = "General endpoints for knowing the status of the backend and other general information")
     ),
 )]
@@ -217,11 +251,7 @@ pub fn app_with_state(
         .route("/reset-password", post(password_reset_reset_logic::handler))
         .route("/shares", get(share_get_logic::handler))
         .route("/shares/{ticker}/sector", get(share_get_sector::handler))
-        .route("/shares/update", get(share_update_logic::handler))
-        .route(
-            "/admin/user-shares/backfill",
-            post(user_shares_backfill::backfill_user_shares_handler),
-        );
+        .route("/shares/update", get(share_update_logic::handler));
 
     // Tablero de retro del equipo: no es del dominio del TP, no pasa por JWT
     // (tarjetas anonimas a proposito), protegido por un PIN compartido
@@ -286,7 +316,12 @@ pub fn app_with_state(
         .route(
             "/user/shares/{id}",
             put(user_share_put_logic::handler).delete(user_share_delete_logic::handler),
-        );
+        )
+        .route(
+            "/user/shares/{ticker}/candles",
+            get(user_share_candles_logic::handler),
+        )
+        .route("/market/series", get(market_series_logic::handler));
 
     // Rutas protegidas por JWT (middleware)
     let profile_gated = Router::new()
@@ -304,6 +339,14 @@ pub fn app_with_state(
             get(user_share_portfolio_logic::handler),
         )
         .route("/user/shares/pnl", get(user_share_pnl_logic::handler))
+        .route(
+            "/user/shares/{ticker}/explain",
+            get(user_share_explain_logic::handler),
+        )
+        .route(
+            "/user/signals/history",
+            get(user_share_signals_history_logic::handler),
+        )
         .route(
             "/user/alerts/subscriptions",
             get(alert_subscription_get_logic::handler),
@@ -331,8 +374,19 @@ pub fn app_with_state(
             require_profile,
         ));
 
+    // Rutas solo para role = admin (require_admin corre despues de require_auth)
+    let admin_routes = Router::new()
+        .route(
+            "/admin/user-shares/backfill",
+            post(user_shares_backfill::backfill_user_shares_handler),
+        )
+        .route("/admin/health", get(admin_health_logic::handler))
+        .route("/admin/models", get(admin_models_logic::handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
+
     let protected = auth_only
         .merge(profile_gated)
+        .merge(admin_routes)
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // /login usa session layer (server-side) además del JWT que devuelve en el body

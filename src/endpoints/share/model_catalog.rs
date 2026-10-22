@@ -4,7 +4,7 @@ use serde_json::Value;
 
 pub async fn ready_tickers() -> Result<HashSet<String>, String> {
     let base = std::env::var("DATA_COLLECTOR_URL")
-        .unwrap_or_else(|_| "https://data-colector.onrender.com".into());
+        .unwrap_or_else(|_| "https://data-colector-k7h6.onrender.com".into());
     let response = reqwest::Client::builder()
         .timeout(Duration::from_secs(45))
         .build()

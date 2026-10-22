@@ -108,7 +108,7 @@ mod tests {
     fn latest_price_picks_highest_ts_regardless_of_order() {
         let history = vec![
             point(3 * DAY, "110.0"),
-            point(1 * DAY, "100.0"),
+            point(DAY, "100.0"),
             point(2 * DAY, "105.0"),
         ];
         assert_eq!(latest_price(&history).unwrap(), 110.0);
