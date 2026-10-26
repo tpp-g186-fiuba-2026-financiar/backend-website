@@ -157,7 +157,10 @@ impl Modify for SecurityAddon {
         endpoints::user_share::candles_logic::handler,
         endpoints::user_share::explain_logic::handler,
         endpoints::user_share::fair_value_logic::handler,
+        endpoints::user_share::volatility_logic::handler,
         endpoints::user_share::signals_history_logic::handler,
+        endpoints::user_share::track_record_logic::handler,
+        endpoints::user_share::ranking_logic::handler,
         endpoints::market::series_logic::handler,
         endpoints::admin::health_logic::handler,
         endpoints::admin::models_logic::handler,
@@ -349,8 +352,20 @@ pub fn app_with_state(
             get(endpoints::user_share::fair_value_logic::handler),
         )
         .route(
+            "/user/shares/{ticker}/volatility",
+            get(endpoints::user_share::volatility_logic::handler),
+        )
+        .route(
             "/user/signals/history",
             get(user_share_signals_history_logic::handler),
+        )
+        .route(
+            "/user/signals/track-record",
+            get(endpoints::user_share::track_record_logic::handler),
+        )
+        .route(
+            "/user/ranking",
+            get(endpoints::user_share::ranking_logic::handler),
         )
         .route(
             "/user/alerts/subscriptions",
