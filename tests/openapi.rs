@@ -22,6 +22,8 @@ fn openapi_document_lists_the_public_endpoints() {
         "/market/series",
         "/admin/health",
         "/admin/models",
+        "/admin/models/{model}/hidden",
+        "/models/hidden",
         "/admin/user-shares/backfill",
     ] {
         assert!(paths.contains_key(path), "missing {path} in OpenAPI");

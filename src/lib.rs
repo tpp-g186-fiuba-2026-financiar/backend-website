@@ -158,14 +158,21 @@ impl Modify for SecurityAddon {
         endpoints::user_share::candles_logic::handler,
         endpoints::user_share::explain_logic::handler,
         endpoints::user_share::fair_value_logic::handler,
+        endpoints::user_share::volatility_logic::handler,
         endpoints::user_share::signals_history_logic::handler,
+        endpoints::user_share::track_record_logic::handler,
+        endpoints::user_share::ranking_logic::handler,
         endpoints::market::series_logic::handler,
         endpoints::admin::health_logic::handler,
         endpoints::admin::models_logic::handler,
+        endpoints::admin::hidden_models_logic::list,
+        endpoints::admin::hidden_models_logic::hide,
+        endpoints::admin::hidden_models_logic::show,
         endpoints::user_share::user_shares_backfill::backfill_user_shares_handler,
     ),
     components(
         schemas(
+            endpoints::admin::hidden_models_logic::HiddenModelsResponse,
             RegisterUserRequest,
             RegisterUserResponse,
             LoginUserRequest,
@@ -293,6 +300,10 @@ pub fn app_with_state(
     // Rutas protegidas por auth pero que NO necesitan un profile (para que el usuario pueda crear su profile)
     let auth_only = Router::new()
         .route(
+            "/models/hidden",
+            get(endpoints::admin::hidden_models_logic::list),
+        )
+        .route(
             "/user",
             get(get_user_logic::handler).delete(user_delete_logic::handler),
         )
@@ -350,8 +361,20 @@ pub fn app_with_state(
             get(endpoints::user_share::fair_value_logic::handler),
         )
         .route(
+            "/user/shares/{ticker}/volatility",
+            get(endpoints::user_share::volatility_logic::handler),
+        )
+        .route(
             "/user/signals/history",
             get(user_share_signals_history_logic::handler),
+        )
+        .route(
+            "/user/signals/track-record",
+            get(endpoints::user_share::track_record_logic::handler),
+        )
+        .route(
+            "/user/ranking",
+            get(endpoints::user_share::ranking_logic::handler),
         )
         .route(
             "/user/alerts/subscriptions",
@@ -388,6 +411,11 @@ pub fn app_with_state(
         )
         .route("/admin/health", get(admin_health_logic::handler))
         .route("/admin/models", get(admin_models_logic::handler))
+        .route(
+            "/admin/models/{model}/hidden",
+            put(endpoints::admin::hidden_models_logic::hide)
+                .delete(endpoints::admin::hidden_models_logic::show),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
     let protected = auth_only

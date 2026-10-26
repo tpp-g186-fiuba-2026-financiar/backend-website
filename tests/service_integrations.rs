@@ -546,7 +546,7 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["symbols"], "COVR");
-    assert_eq!(body["limit"], "200");
+    assert_eq!(body["limit"], "3000");
 
     let (status, body) = request(app.clone(), Method::GET, "/user", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
@@ -556,6 +556,8 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
         (Method::GET, "/admin/health"),
         (Method::GET, "/admin/models"),
         (Method::POST, "/admin/user-shares/backfill"),
+        (Method::PUT, "/admin/models/macro/hidden"),
+        (Method::DELETE, "/admin/models/macro/hidden"),
     ] {
         let (status, _) = request(app.clone(), method.clone(), uri, None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri} sin token");
@@ -585,6 +587,43 @@ async fn external_service_endpoints_cover_success_and_error_paths() {
     let (status, body) = request(app.clone(), Method::GET, "/admin/models", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["models"]["xgboost"]["auc"], 0.55);
+
+    // Modelos ocultos: macro arranca oculto, el admin oculta y vuelve a mostrar.
+    let (status, body) = request(app.clone(), Method::GET, "/models/hidden", Some(&token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["hidden"].as_array().unwrap().contains(&json!("macro")));
+    let (status, body) = request(
+        app.clone(),
+        Method::PUT,
+        "/admin/models/test-oculto/hidden",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["hidden"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("test-oculto")));
+    let (status, body) = request(
+        app.clone(),
+        Method::DELETE,
+        "/admin/models/test-oculto/hidden",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body["hidden"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("test-oculto")));
+    let (status, _) = request(
+        app.clone(),
+        Method::PUT,
+        "/admin/models/no%20vale/hidden",
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let (status, _) = request(
         app.clone(),

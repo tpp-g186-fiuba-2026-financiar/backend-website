@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::auth::middleware::AuthUser;
 use crate::endpoints::upstream;
 
-const SIGNALS_LIMIT: &str = "200";
+const SIGNALS_LIMIT: &str = "3000";
 
 #[utoipa::path(
     get,

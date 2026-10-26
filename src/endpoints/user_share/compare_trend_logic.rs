@@ -327,9 +327,10 @@ async fn fetch_api_ml_local_models(
     api_ml_url: Option<&str>,
     ticker: &str,
 ) -> (HashMap<String, Value>, bool) {
-    const LOCAL_MODEL_KEYS: [&str; 6] = [
+    const LOCAL_MODEL_KEYS: [&str; 7] = [
         "lstm",
         "xgboost",
+        "xgboost-5",
         "transformer",
         "arima",
         "macro",
