@@ -74,6 +74,12 @@ pub async fn handler(
         .timeout(Duration::from_secs(20))
         .build()
         .expect("reqwest client");
+    // api-ml corre todos los modelos y, la primera vez del dia, tarda bastante
+    // mas que Modal: se le da mas margen (el front espera 90 s).
+    let api_ml_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(API_ML_TIMEOUT_SECS))
+        .build()
+        .expect("reqwest client");
     let api_ml_url = std::env::var("API_ML_URL").ok();
 
     // Los modelos de Modal predicen en vivo en cada pedido y, si tardan, la
@@ -96,7 +102,17 @@ pub async fn handler(
     let garch_ann_url =
         std::env::var("MODAL_GARCH_ANN_URL").unwrap_or_else(|_| DEFAULT_GARCH_ANN_URL.into());
 
-    let (lstm, xgboost, transformer, arima, svm, garch, garch_ann, api_ml_models, consensus) = tokio::join!(
+    let (
+        lstm,
+        xgboost,
+        transformer,
+        arima,
+        svm,
+        garch,
+        garch_ann,
+        (api_ml_models, api_ml_ok),
+        consensus,
+    ) = tokio::join!(
         fetch_modal(&client, "lstm-modal", &lstm_url, &ticker),
         fetch_modal(&client, "xgboost-modal", &xgboost_url, &ticker),
         fetch_modal(&client, "transformer-modal", &transformer_url, &ticker),
@@ -104,8 +120,13 @@ pub async fn handler(
         fetch_svm(&client, &svm_url, &ticker),
         fetch_garch(&client, &garch_url, &ticker),
         fetch_garch_ann(&client, &garch_ann_url, &ticker),
-        fetch_api_ml_local_models(&client, api_ml_url.as_deref(), &ticker),
-        fetch_consensus(&client, api_ml_url.as_deref(), &ticker, &risk_profile),
+        fetch_api_ml_local_models(&api_ml_client, api_ml_url.as_deref(), &ticker),
+        fetch_consensus(
+            &api_ml_client,
+            api_ml_url.as_deref(),
+            &ticker,
+            &risk_profile
+        ),
     );
 
     let as_of = lstm
@@ -132,10 +153,16 @@ pub async fn handler(
         "default_model": default_model,
         "predictions": predictions,
     });
-    store_comparison(&pool, &ticker, &body, complete).await;
+    // Si api-ml no respondio no se guarda: el proximo pedido lo reintenta en
+    // vez de mostrar la comparacion sin los modelos de api-ml por un rato.
+    if api_ml_ok {
+        store_comparison(&pool, &ticker, &body, complete).await;
+    }
     body["consensus"] = consensus;
     (StatusCode::OK, Json(body))
 }
+
+const API_ML_TIMEOUT_SECS: u64 = 75;
 
 /// Minutos que se reusa una comparacion en la que algun modelo no respondio,
 /// antes de volver a intentar.
@@ -304,12 +331,13 @@ fn pick_best_model(predictions: &serde_json::Map<String, Value>) -> String {
 /// Modelos locales de `api-ml` (lstm/xgboost/transformer/arima/macro): un modelo
 /// pooleado sobre todo el panel (a diferencia de los `-modal`, que son
 /// per-ticker), con backtest walk-forward propio. Se muestran como
-/// alternativa junto a los de Modal, no en reemplazo.
+/// alternativa junto a los de Modal, no en reemplazo. El `bool` dice si api-ml
+/// respondio.
 async fn fetch_api_ml_local_models(
     client: &reqwest::Client,
     api_ml_url: Option<&str>,
     ticker: &str,
-) -> HashMap<String, Value> {
+) -> (HashMap<String, Value>, bool) {
     const LOCAL_MODEL_KEYS: [&str; 6] = [
         "lstm",
         "xgboost",
@@ -319,10 +347,11 @@ async fn fetch_api_ml_local_models(
         "contexto",
     ];
     let Some(api_ml_url) = api_ml_url else {
-        return LOCAL_MODEL_KEYS
+        let models = LOCAL_MODEL_KEYS
             .into_iter()
             .map(|key| (key.to_string(), unavailable("api-ml no esta configurado")))
             .collect();
+        return (models, true);
     };
     let url = format!(
         "{}/predict/trend/compare/{}",
@@ -359,7 +388,7 @@ async fn fetch_api_ml_local_models(
         .as_ref()
         .and_then(|b| b.get("predictions"))
         .and_then(Value::as_object);
-    LOCAL_MODEL_KEYS
+    let models = LOCAL_MODEL_KEYS
         .into_iter()
         .map(|key| {
             let value = match predictions.and_then(|map| map.get(key)).cloned() {
@@ -374,7 +403,8 @@ async fn fetch_api_ml_local_models(
             };
             (key.to_string(), value)
         })
-        .collect()
+        .collect();
+    (models, body.is_some())
 }
 
 async fn fetch_arima(client: &reqwest::Client, url: &str, ticker: &str) -> Value {

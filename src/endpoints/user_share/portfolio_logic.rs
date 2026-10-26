@@ -33,6 +33,10 @@ pub struct PortfolioQuery {
     model: Option<String>,
     /// Estrategia de cartera ancla: propia | equal_weight | mercado
     cartera_ancla: Option<String>,
+    /// Cuantas acciones que el usuario no tiene puede sumar (default 2 en api-ml; 0 = solo las suyas)
+    max_nuevas: Option<u8>,
+    /// true = puede usar todo el panel
+    todas: Option<bool>,
 }
 
 /// Detalle Black-Litterman por ticker (se reenvia tal cual desde api-ml).
@@ -61,6 +65,14 @@ pub struct PortfolioRecomendacionResponse {
     pub tickers_excluidos: std::collections::HashMap<String, String>,
     /// Estrategia de cartera ancla usada: propia | equal_weight | mercado
     pub cartera_ancla: String,
+    /// Acciones que el usuario no tenia y la recomendacion suma
+    pub acciones_nuevas: Vec<String>,
+    /// Fraccion de la cartera que cambia de manos
+    pub rotacion: f64,
+    /// Costo estimado de hacer los movimientos, como fraccion del valor de la cartera
+    pub costo_estimado: f64,
+    /// Costo por unidad operada que se uso (comision + derechos + spread)
+    pub costo_operacion: f64,
 }
 
 #[utoipa::path(
@@ -198,10 +210,16 @@ pub async fn handler(
     // implementada), no hace falta duplicar esa validacion aca.
     let mut query_params = Vec::new();
     if let Some(model) = &query.model {
-        query_params.push(("model", model.as_str()));
+        query_params.push(("model", model.to_string()));
     }
     if let Some(cartera_ancla) = &query.cartera_ancla {
-        query_params.push(("cartera_ancla", cartera_ancla.as_str()));
+        query_params.push(("cartera_ancla", cartera_ancla.to_string()));
+    }
+    if let Some(max_nuevas) = query.max_nuevas {
+        query_params.push(("max_nuevas", max_nuevas.to_string()));
+    }
+    if query.todas == Some(true) {
+        query_params.push(("todas", "true".to_string()));
     }
     if !query_params.is_empty() {
         request = request.query(&query_params);
