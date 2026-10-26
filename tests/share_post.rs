@@ -1,3 +1,5 @@
+mod common;
+
 use axum::{
     body::Body,
     http::{header, Request, StatusCode},
@@ -16,6 +18,7 @@ const JWT_EXP_HOURS: i64 = 24;
 
 async fn setup() -> AppState {
     dotenv().ok();
+    common::start_collector_stub();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let pool = sqlx::PgPool::connect(&database_url)
         .await
