@@ -61,3 +61,19 @@ async fn share_update_when_data_collector_is_unreachable_returns_500() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["code"], 500);
 }
+
+// El job de background corre la misma sincronizacion al arrancar el back: si
+// data-colector no responde no tiene que romper (reintenta mas tarde).
+#[tokio::test]
+async fn ticker_sync_job_survives_unreachable_data_collector() {
+    std::env::set_var("DATA_COLLECTOR_URL", "http://127.0.0.1:9");
+
+    let state = setup().await;
+    let err = backend_website::endpoints::share::update_logic::sync_tickers(&state.pool)
+        .await
+        .unwrap_err();
+    assert_eq!(err, "Could not reach data collector.");
+
+    backend_website::endpoints::share::update_logic::spawn_ticker_sync_job(state.pool.clone());
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+}
