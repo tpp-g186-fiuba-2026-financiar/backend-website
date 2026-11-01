@@ -1,0 +1,3478 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "backend-website",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/admin/health": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Estado y latencia de los servicios externos (timeout 5s cada uno, en paralelo)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminHealthResponse"
+                },
+                "example": {
+                  "all_up": false,
+                  "services": [
+                    {
+                      "error": null,
+                      "http_status": 200,
+                      "latency_ms": 120,
+                      "name": "data-colector",
+                      "status": "up"
+                    },
+                    {
+                      "error": null,
+                      "http_status": 200,
+                      "latency_ms": 85,
+                      "name": "api-ml",
+                      "status": "up"
+                    },
+                    {
+                      "error": "timeout",
+                      "http_status": null,
+                      "latency_ms": 5001,
+                      "name": "modal",
+                      "status": "down"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/admin/models": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Diagnostico de los modelos (backtests + metricas OOS de XGBoost), tal cual lo devuelve api-ml en GET /models/diagnostics",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/admin/models/{model}/hidden": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "hide",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "description": "Clave del modelo, ej: macro, xgboost-modal",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Modelo oculto; devuelve la lista completa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenModelsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nombre de modelo invalido"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "show",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "description": "Clave del modelo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Modelo visible de nuevo; devuelve la lista completa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenModelsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nombre de modelo invalido"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/admin/user-shares/backfill": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "backfill_user_shares_handler",
+        "responses": {
+          "200": {
+            "description": "Completa entry_price faltantes y siembra el ledger de operaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "El usuario no es administrador"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/forgot-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta generica: el mail se manda solo si la cuenta existe y no se mando otro en el ultimo minuto. El link vence en 1 hora (ver /reset-password)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "If an account exists for that email, a password reset email was sent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Email vacio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 400,
+                  "message": "Email is required"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Health check successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hello": {
+      "get": {
+        "tags": [
+          "General"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Simple Hello Response!",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelloResponse"
+                },
+                "example": {
+                  "message": "Hello from Financiar backend!",
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User logged in successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "Login successful",
+                  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 400,
+                  "message": "Email and password are required"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials, or missing/invalid 2FA code (two_factor_required = true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 401,
+                  "message": "Two-factor code required",
+                  "two_factor_required": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid credentials but the email is not verified yet (email_verification_required = true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 403,
+                  "email_verification_required": true,
+                  "message": "Email not verified"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUserResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/market/series": {
+      "get": {
+        "tags": [
+          "Market"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Series macro/mercado (dolar, riesgo pais, tasas, reservas, commodities). Una serie caida no rompe las demas: se informa en `unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketSeriesResponse"
+                },
+                "example": {
+                  "series": [
+                    {
+                      "key": "CCL",
+                      "points": [
+                        {
+                          "ts": 1747008000000,
+                          "value": 1610.8
+                        }
+                      ]
+                    },
+                    {
+                      "key": "TNX",
+                      "points": [
+                        {
+                          "ts": 1747008000000,
+                          "value": 4.25
+                        }
+                      ]
+                    }
+                  ],
+                  "unavailable": [
+                    {
+                      "key": "RESERVAS",
+                      "reason": "Failed to fetch interest rate series"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/models/hidden": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Modelos que el admin oculto: el front no se los muestra al usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenModelsResponse"
+                },
+                "example": {
+                  "hidden": [
+                    "macro"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User registered successfully. A verification email is sent and the account can't log in until it is verified (see /verify-email)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "User registered successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "examples": {
+                  "Invalid Email": {
+                    "summary": "Triggered when the email is invalid (either wrong format or not provided)",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid e-mail"
+                    }
+                  },
+                  "Invalid Risk Profile": {
+                    "summary": "Triggered when risk profile is not a permitted value",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid risk profile. Must be 'conservative', 'moderate', or 'aggressive'."
+                    }
+                  },
+                  "Weak Password": {
+                    "summary": "Triggered when password requirements are not met",
+                    "value": {
+                      "code": 400,
+                      "message": "Password must be at least 8 characters long and contain a mix of letters, numbers, and special characters"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "User already exists for that email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 409,
+                  "message": "User already exists for that email!"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterUserResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reset-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Contrasena actualizada; el token queda invalidado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "Password updated successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token invalido, vencido o ya usado; o contrasena que no cumple los requisitos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "examples": {
+                  "Invalid Token": {
+                    "summary": "Triggered when the token is unknown, expired or already used",
+                    "value": {
+                      "code": 400,
+                      "message": "Invalid or expired reset token"
+                    }
+                  },
+                  "Weak Password": {
+                    "summary": "Triggered when password requirements are not met",
+                    "value": {
+                      "code": 400,
+                      "message": "Password must be at least 8 characters long"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shares": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "List of all available share tickers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAllSharesResponse"
+                },
+                "example": {
+                  "shares": [
+                    {
+                      "id": 1,
+                      "ticker": "GGAL"
+                    },
+                    {
+                      "id": 2,
+                      "ticker": "YPF"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/shares/update": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Tickers synced successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/shares/{ticker}/sector": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker de la accion (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sector de la accion obtenido de data-collector"
+          },
+          "502": {
+            "description": "data-collector no pudo responder"
+          }
+        }
+      }
+    },
+    "/user": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Authenticated user retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-13T12:00:00Z",
+                  "email": "financiar186@gmail.com",
+                  "full_name": "John Doe",
+                  "has_to_redo_risk_profile": false,
+                  "id": 1,
+                  "is_active": true,
+                  "risk_profile": "moderate",
+                  "role": "user",
+                  "two_factor_enabled": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Authenticated user no longer exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "204": {
+            "description": "Authenticated user (and all related data) deleted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Authenticated user no longer exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/disable": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "disable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA desactivado"
+          },
+          "400": {
+            "description": "Codigo invalido o 2FA no activado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/enable": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "enable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA activado"
+          },
+          "400": {
+            "description": "Codigo invalido o setup no iniciado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/2fa/setup": {
+      "post": {
+        "tags": [
+          "Two-Factor"
+        ],
+        "operationId": "setup",
+        "responses": {
+          "200": {
+            "description": "Secreto generado; escanear el QR y confirmar con /user/2fa/enable"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "2FA ya esta activado"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/alerts/subscriptions": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Suscripciones a alertas del usuario autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAlertSubscriptionsResponse"
+                },
+                "example": {
+                  "portfolio": false,
+                  "tickers": [
+                    "GGAL",
+                    "YPFD"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/alerts/subscriptions/portfolio": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Suscribe al usuario autenticado a alertas por mail de toda su cartera\n(cualquier ticker que declare, presente o futuro).",
+        "operationId": "subscribe_portfolio",
+        "responses": {
+          "201": {
+            "description": "Suscripcion a toda la cartera creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "Ya existe una suscripcion a la cartera completa"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "unsubscribe_portfolio",
+        "responses": {
+          "204": {
+            "description": "Suscripcion a la cartera eliminada"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "No existe una suscripcion a la cartera completa"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/alerts/subscriptions/{ticker}": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Suscribe al usuario autenticado a alertas por mail de un ticker puntual.\nEl ticker tiene que estar en la cartera declarada del usuario (misma\nfuente que `/user/shares/trends`): no tiene sentido alertar sobre una\naccion que el usuario no sigue.",
+        "operationId": "subscribe_ticker",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker de la cartera del usuario a suscribir",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Suscripcion creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "El ticker no esta en la cartera declarada del usuario"
+          },
+          "409": {
+            "description": "Ya existe una suscripcion a este ticker"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Alerts"
+        ],
+        "operationId": "unsubscribe_ticker",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker a desuscribir",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Suscripcion eliminada"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "No existe una suscripcion a ese ticker"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/preferences": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveUserPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Preference saved for the authenticated user and stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveUserPreferenceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid stock ticker or unsupported model"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/preferences/{stock}": {
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "stock",
+            "in": "path",
+            "description": "Stock ticker whose preference should be deleted",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Preference deleted successfully"
+          },
+          "400": {
+            "description": "Invalid stock ticker"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Preference not found for the authenticated user and stock"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/ranking": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Ranking del dia del panel segun XGBoost (P de suba, puntaje 1-10 y senal), tal cual lo devuelve api-ml en GET /predict/ranking",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "List of shares declared by the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSharesResponse"
+                },
+                "example": {
+                  "shares": [
+                    {
+                      "created_at": "2026-05-28T12:00:00Z",
+                      "entry_price": 1520.5,
+                      "id": 1,
+                      "quantity": 10,
+                      "ticker": "GGAL",
+                      "user_id": 42
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Share added to the authenticated user's portfolio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateShareResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-28T12:00:00Z",
+                  "entry_price": 1520.5,
+                  "id": 1,
+                  "quantity": 10,
+                  "ticker": "GGAL",
+                  "user_id": 42
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "409": {
+            "description": "The authenticated user already has this ticker in their portfolio"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve a current price to use as entry_price"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/pnl": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Ganancia/perdida (P&L) por ticker y agregada de la cartera del usuario autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PnlResponse"
+                },
+                "example": {
+                  "portfolio": {
+                    "total_current_value": 18000.0,
+                    "total_invested": 15000.0,
+                    "total_pnl_amount": 3000.0,
+                    "total_pnl_percentage": 20.0
+                  },
+                  "shares": [
+                    {
+                      "current_price": 1800.0,
+                      "entry_price": 1500.0,
+                      "id": 1,
+                      "pnl_amount": 3000.0,
+                      "pnl_percentage": 20.0,
+                      "quantity": 10,
+                      "ticker": "GGAL",
+                      "weight_percentage": 66.67
+                    },
+                    {
+                      "current_price": 900.0,
+                      "entry_price": null,
+                      "id": 2,
+                      "pnl_amount": null,
+                      "pnl_percentage": null,
+                      "quantity": 5,
+                      "ticker": "YPFD",
+                      "weight_percentage": 33.33
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/portfolio/recomendacion": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "description": "Modelo de prediccion de tendencia a usar (ver /models en api-ml para el default vigente)",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cartera_ancla",
+            "in": "path",
+            "description": "Estrategia de cartera ancla: propia | equal_weight | mercado",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "max_nuevas",
+            "in": "path",
+            "description": "Cuantas acciones que el usuario no tiene puede sumar (default 2 en api-ml; 0 = solo las suyas)",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "todas",
+            "in": "path",
+            "description": "true = puede usar todo el panel",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pesos de cartera recomendados (Black-Litterman) para el usuario autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioRecomendacionResponse"
+                },
+                "example": {
+                  "cartera_ancla": "propia",
+                  "detalle": [
+                    {
+                      "horizon_days": 5,
+                      "mu_bl": 0.0007,
+                      "omega": 0.00002,
+                      "peso_actual": 0.5,
+                      "peso_recomendado": 0.58,
+                      "pi": 0.0004,
+                      "q": 0.0011,
+                      "ticker": "GGAL"
+                    }
+                  ],
+                  "pesos_recomendados": {
+                    "GGAL": 0.58,
+                    "YPFD": 0.42
+                  },
+                  "tickers_excluidos": {
+                    "PAMP": "sin prediccion disponible"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El usuario no tiene perfil de riesgo configurado"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Modelo de prediccion desconocido"
+          },
+          "422": {
+            "description": "No hay suficientes datos para calcular la recomendacion"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "501": {
+            "description": "Estrategia de cartera ancla solicitada todavia no implementada"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/trends": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Trend prediction from each stock's preferred model, or lstm-modal by default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTrendsResponse"
+                },
+                "example": {
+                  "trends": [
+                    {
+                      "as_of": "2026-06-17",
+                      "available": true,
+                      "condition": "neutral",
+                      "horizon_days": 5,
+                      "last_close": 8365.0,
+                      "model": "lstm",
+                      "model_version": "lstm-20260618T003942Z",
+                      "predicted_close": 8511.82,
+                      "reason": null,
+                      "rsi": 58.3,
+                      "signal": "alza",
+                      "ticker": "GGAL"
+                    },
+                    {
+                      "as_of": null,
+                      "available": false,
+                      "condition": null,
+                      "horizon_days": null,
+                      "last_close": null,
+                      "model": null,
+                      "model_version": null,
+                      "predicted_close": null,
+                      "reason": "No se pudo contactar a api-ml",
+                      "rsi": null,
+                      "signal": null,
+                      "ticker": "YPFD"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{id}": {
+      "put": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the share to update",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Share updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateShareResponse"
+                },
+                "example": {
+                  "created_at": "2026-05-28T12:00:00Z",
+                  "entry_price": 1520.5,
+                  "id": 1,
+                  "quantity": 25,
+                  "ticker": "GGAL",
+                  "user_id": 42
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Share not found for the authenticated user"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve a current price for the buy/sell delta"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the share to delete",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Share deleted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "404": {
+            "description": "Share not found for the authenticated user"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "Failed to resolve the current price needed to record the sale"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/candles": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Cantidad de ruedas mas recientes a devolver (default: todas las cacheadas)",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Velas diarias OHLCV ordenadas por fecha ascendente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandlesResponse"
+                },
+                "example": {
+                  "candles": [
+                    {
+                      "close": 7605.0,
+                      "date": "2026-06-25",
+                      "high": 7720.0,
+                      "low": 7580.0,
+                      "open": 7650.0,
+                      "volume": 1200000
+                    }
+                  ],
+                  "ticker": "GGAL"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "502": {
+            "description": "data-colector no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/explain": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Explicacion de la prediccion XGBoost (contribucion de cada feature), tal cual la devuelve api-ml en GET /predict/trend/xgboost/explain/{ticker}",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "404": {
+            "description": "api-ml no tiene modelo/datos para el ticker"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/fair-value": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Precio estimado por regresion lineal (recta de tendencia del ultimo año, distancia del precio actual y canal de +-1/+-2 desvios), tal cual lo devuelve api-ml en GET /predict/fair-value/{ticker}",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "422": {
+            "description": "Pocas ruedas para ajustar la regresion"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/history": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historico de cierres disponible en data-colector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "502": {
+            "description": "data-colector no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/trends/compare": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker a comparar (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compara los modelos productivos de tendencia desplegados en Modal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareTrendsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "502": {
+            "description": "Ningun modelo de Modal pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/shares/{ticker}/volatility": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "description": "Ticker (ej: GGAL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "horizon",
+            "in": "path",
+            "description": "Ruedas a pronosticar (1 a 60; default el de api-ml)",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pronostico GARCH(1,1) de cuanto puede moverse el precio (no la direccion), tal cual lo devuelve api-ml en GET /predict/volatility/{ticker}",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "422": {
+            "description": "Pocas ruedas para ajustar GARCH"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/signals/history": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Historial de senales emitidas por los modelos para los tickers del usuario, tal cual lo devuelve api-ml en GET /signals/history. Sin tenencias devuelve `{\"signals\": []}` sin consultar a api-ml",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/user/signals/track-record": {
+      "get": {
+        "tags": [
+          "Share"
+        ],
+        "operationId": "handler",
+        "responses": {
+          "200": {
+            "description": "Que hubiera pasado siguiendo las senales de cada modelo (todo el panel, por version), tal cual lo devuelve api-ml en GET /signals/track-record",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication token"
+          },
+          "403": {
+            "description": "Perfil de riesgo faltante o vencido"
+          },
+          "502": {
+            "description": "api-ml no pudo responder"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/verify-email": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Cuenta verificada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "Email verified successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token invalido, vencido o ya usado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 400,
+                  "message": "Invalid or expired verification token"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify-email/resend": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta generica: se reenvia el mail solo si la cuenta existe, no esta verificada y no se envio otro en el ultimo minuto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "If the account exists and is not verified yet, a new verification email was sent"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailVerificationResponse"
+                },
+                "example": {
+                  "code": 500,
+                  "message": "An unexpected error occurred. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminHealthResponse": {
+        "type": "object",
+        "required": [
+          "all_up",
+          "services"
+        ],
+        "properties": {
+          "all_up": {
+            "type": "boolean",
+            "description": "true si todos los servicios estan `up`"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceHealth"
+            }
+          }
+        }
+      },
+      "AlertSubscriptionResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BackfillReport": {
+        "type": "object",
+        "required": [
+          "entry_prices_updated",
+          "entry_prices_skipped",
+          "operations_seeded"
+        ],
+        "properties": {
+          "entry_prices_skipped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entry_prices_updated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operations_seeded": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Candle": {
+        "type": "object",
+        "required": [
+          "date",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "properties": {
+          "close": {
+            "type": "number",
+            "format": "double"
+          },
+          "date": {
+            "type": "string",
+            "description": "Fecha de la rueda (UTC), formato YYYY-MM-DD"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "open": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CandlesResponse": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "candles"
+        ],
+        "properties": {
+          "candles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candle"
+            }
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
+      "CompareTrendsResponse": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "predictions"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "consensus": {
+            "description": "Lectura unica (sobrecompra/sobreventa/neutral) de `api-ml`, ajustada al\nperfil de riesgo del usuario, con su historial de aciertos en paper\ntrading (`track_record`). Null si `api-ml` no respondio."
+          },
+          "default_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predictions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModelPredictionItem"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "symbol": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateShareRequest": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "quantity"
+        ],
+        "properties": {
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Precio de entrada (precio pagado por accion). Opcional — si se\nomite, se resuelve con el precio de mercado actual en el momento\nde la creacion.",
+            "example": 1520.5
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "example": 10
+          },
+          "ticker": {
+            "type": "string",
+            "example": "GGAL"
+          }
+        }
+      },
+      "CreateShareResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "EmailVerificationResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cuenta_ejemplo@gmail.com"
+          }
+        }
+      },
+      "GetUserResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "full_name",
+          "has_to_redo_risk_profile",
+          "is_active",
+          "two_factor_enabled",
+          "role",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "has_to_redo_risk_profile": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "risk_profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "description": "user | admin"
+          },
+          "two_factor_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HelloResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HiddenModelsResponse": {
+        "type": "object",
+        "required": [
+          "hidden"
+        ],
+        "properties": {
+          "hidden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Claves de los modelos ocultos (las mismas de `predictions` en compare)."
+          }
+        }
+      },
+      "HistoricalPricePoint": {
+        "type": "object",
+        "required": [
+          "ts",
+          "close"
+        ],
+        "properties": {
+          "close": {
+            "type": "number",
+            "format": "double"
+          },
+          "ts": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ListAlertSubscriptionsResponse": {
+        "type": "object",
+        "required": [
+          "portfolio",
+          "tickers"
+        ],
+        "properties": {
+          "portfolio": {
+            "type": "boolean",
+            "description": "True si el usuario esta suscripto a toda su cartera (cualquier ticker\nque declare recibe alertas), no solo a los de `tickers`."
+          },
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ListAllSharesResponse": {
+        "type": "object",
+        "required": [
+          "shares"
+        ],
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareTickerItem"
+            }
+          }
+        }
+      },
+      "ListSharesResponse": {
+        "type": "object",
+        "required": [
+          "shares"
+        ],
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareItem"
+            }
+          }
+        }
+      },
+      "ListTrendsResponse": {
+        "type": "object",
+        "required": [
+          "trends"
+        ],
+        "properties": {
+          "trends": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareTrendItem"
+            }
+          }
+        }
+      },
+      "LoginUserRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "financiar186@gmail.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPassword123!"
+          },
+          "totp_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Codigo de 6 digitos de la app autenticadora; solo se exige si el\nusuario tiene 2FA activado.",
+            "example": "123456"
+          }
+        }
+      },
+      "LoginUserResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "email_verification_required": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "true cuando la contrasena es correcta pero el mail todavia no se\nverifico (ver /verify-email y /verify-email/resend)."
+          },
+          "message": {
+            "type": "string"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "two_factor_required": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "MarketSeries": {
+        "type": "object",
+        "required": [
+          "key",
+          "points"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "CCL | MEP | RIESGO_PAIS | TPM | BADLAR | RESERVAS | TNX | GOLD | OIL"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            }
+          }
+        }
+      },
+      "MarketSeriesResponse": {
+        "type": "object",
+        "required": [
+          "series",
+          "unavailable"
+        ],
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketSeries"
+            },
+            "description": "Series que se pudieron obtener, en el orden fijo de arriba"
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnavailableSeries"
+            },
+            "description": "Series que fallaron (se omiten de `series`), con el motivo"
+          }
+        }
+      },
+      "ModelPredictionItem": {
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "backtest": {},
+          "condition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horizon_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predicted_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rsi": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "signal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "volatility_forecast": {}
+        }
+      },
+      "PasswordResetResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "PnlResponse": {
+        "type": "object",
+        "required": [
+          "shares",
+          "portfolio"
+        ],
+        "properties": {
+          "portfolio": {
+            "$ref": "#/components/schemas/PortfolioPnlSummary"
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharePnlItem"
+            }
+          }
+        }
+      },
+      "PortfolioDetalleItem": {
+        "type": "object",
+        "description": "Detalle Black-Litterman por ticker (se reenvia tal cual desde api-ml).",
+        "required": [
+          "ticker",
+          "peso_actual",
+          "peso_recomendado",
+          "pi",
+          "q",
+          "omega",
+          "mu_bl",
+          "horizon_days"
+        ],
+        "properties": {
+          "horizon_days": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mu_bl": {
+            "type": "number",
+            "format": "double",
+            "description": "Retorno posterior Black-Litterman"
+          },
+          "omega": {
+            "type": "number",
+            "format": "double",
+            "description": "Incertidumbre de la view"
+          },
+          "peso_actual": {
+            "type": "number",
+            "format": "double"
+          },
+          "peso_recomendado": {
+            "type": "number",
+            "format": "double"
+          },
+          "pi": {
+            "type": "number",
+            "format": "double",
+            "description": "Retorno de equilibrio (prior)"
+          },
+          "q": {
+            "type": "number",
+            "format": "double",
+            "description": "View del modelo (retorno diario esperado)"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
+      "PortfolioPnlSummary": {
+        "type": "object",
+        "required": [
+          "total_invested",
+          "total_current_value",
+          "total_pnl_amount"
+        ],
+        "properties": {
+          "total_current_value": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_invested": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_pnl_amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_pnl_percentage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "PortfolioRecomendacionResponse": {
+        "type": "object",
+        "description": "El body de api-ml se reenvia tal cual; este schema documenta sus campos.",
+        "required": [
+          "pesos_recomendados",
+          "detalle",
+          "tickers_excluidos",
+          "cartera_ancla",
+          "acciones_nuevas",
+          "rotacion",
+          "costo_estimado",
+          "costo_operacion"
+        ],
+        "properties": {
+          "acciones_nuevas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Acciones que el usuario no tenia y la recomendacion suma"
+          },
+          "cartera_ancla": {
+            "type": "string",
+            "description": "Estrategia de cartera ancla usada: propia | equal_weight | mercado"
+          },
+          "costo_estimado": {
+            "type": "number",
+            "format": "double",
+            "description": "Costo estimado de hacer los movimientos, como fraccion del valor de la cartera"
+          },
+          "costo_operacion": {
+            "type": "number",
+            "format": "double",
+            "description": "Costo por unidad operada que se uso (comision + derechos + spread)"
+          },
+          "detalle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortfolioDetalleItem"
+            }
+          },
+          "pesos_recomendados": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "rotacion": {
+            "type": "number",
+            "format": "double",
+            "description": "Fraccion de la cartera que cambia de manos"
+          },
+          "tickers_excluidos": {
+            "type": "object",
+            "description": "Ticker -> motivo por el que quedo afuera de la optimizacion",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "full_name"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "financiar186@gmail.com"
+          },
+          "full_name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPassword123!"
+          },
+          "risk_profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional. Must be 'conservative', 'moderate', or 'aggressive'",
+            "example": "moderate"
+          }
+        }
+      },
+      "RegisterUserResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ResendVerificationRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "financiar186@gmail.com"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "properties": {
+          "new_password": {
+            "type": "string",
+            "description": "Nueva contrasena. Mismas reglas que en el registro.",
+            "example": "NewStrongPassword123!"
+          },
+          "token": {
+            "type": "string",
+            "description": "Token recibido en el link del mail de reseteo.",
+            "example": "3f9a1c...e07b"
+          }
+        }
+      },
+      "SaveUserPreferenceRequest": {
+        "type": "object",
+        "required": [
+          "stock",
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "example": "lstm-modal"
+          },
+          "stock": {
+            "type": "string",
+            "example": "GGAL"
+          }
+        }
+      },
+      "SaveUserPreferenceResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "stock",
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "stock": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SeriesPoint": {
+        "type": "object",
+        "required": [
+          "ts",
+          "value"
+        ],
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Epoch en milisegundos"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ServiceHealth": {
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Motivo de la falla, si la hubo"
+          },
+          "http_status": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Status HTTP que respondio el servicio, si respondio",
+            "minimum": 0
+          },
+          "latency_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Latencia del chequeo en ms (null si no se llego a consultar)",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "data-colector | api-ml | modal"
+          },
+          "status": {
+            "type": "string",
+            "description": "up | down | not_configured"
+          }
+        }
+      },
+      "ShareHistoryResponse": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "prices"
+        ],
+        "properties": {
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoricalPricePoint"
+            }
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
+      "ShareItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SharePnlItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "ticker",
+          "quantity"
+        ],
+        "properties": {
+          "current_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pnl_amount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "pnl_percentage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "weight_percentage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Peso de la tenencia sobre el valor de mercado de la cartera (0-100).\nNull si no hay precio actual para el ticker."
+          }
+        }
+      },
+      "ShareTickerItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "ticker",
+          "predictable"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "predictable": {
+            "type": "boolean"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
+      "ShareTrendItem": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "available",
+          "retryable"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "condition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "horizon_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "last_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predicted_close": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "rsi": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "signal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ticker": {
+            "type": "string"
+          }
+        }
+      },
+      "TwoFactorCodeRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "123456"
+          }
+        }
+      },
+      "UnavailableSeries": {
+        "type": "object",
+        "required": [
+          "key",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateShareRequest": {
+        "type": "object",
+        "required": [
+          "quantity"
+        ],
+        "properties": {
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Precio de entrada (precio pagado por accion). Solo se usa si esta\nactualizacion sube la cantidad (compra parcial); si se omite en\nese caso, se resuelve con el precio de mercado actual. Si la\nactualizacion baja la cantidad (venta parcial), este campo se\nignora: el precio de venta siempre es el de mercado actual.",
+            "example": 1520.5
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "example": 25
+          }
+        }
+      },
+      "UpdateShareResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "ticker",
+          "quantity",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entry_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token recibido en el link del mail de verificacion.",
+            "example": "3f9a1c...e07b"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Endpoints for user identity management"
+    },
+    {
+      "name": "Two-Factor",
+      "description": "Endpoints for enabling and disabling TOTP two-factor authentication"
+    },
+    {
+      "name": "User",
+      "description": "Endpoints for retrieving authenticated user information"
+    },
+    {
+      "name": "Share",
+      "description": "Endpoints for managing the authenticated user's declared stock portfolio"
+    },
+    {
+      "name": "Alerts",
+      "description": "Endpoints for subscribing to trend-change email alerts"
+    },
+    {
+      "name": "Market",
+      "description": "Macro and market context series"
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints (require role = admin)"
+    },
+    {
+      "name": "General",
+      "description": "General endpoints for knowing the status of the backend and other general information"
+    }
+  ]
+}
